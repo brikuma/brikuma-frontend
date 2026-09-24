@@ -5,6 +5,7 @@ import type {
   Model,
   ModelSession,
   PartInstance,
+  QuarterTurn,
   Result,
   SampleVariant,
   VariantPreview,
@@ -63,11 +64,36 @@ function updateInstances(model: Model, command: EditCommand): Result<readonly Pa
       ok: true,
       value: model.instances.filter((part) => part.id !== command.id),
     };
+  if (command.type === "duplicate")
+    return {
+      ok: true,
+      value: [...model.instances, { ...instance, id: command.newId, transform: command.transform }],
+    };
   let replacement: PartInstance;
   if (command.type === "recolor") {
     if (instance.colorId === command.colorId)
       return failure("no-change", "This part already uses that color.");
     replacement = { ...instance, colorId: command.colorId };
+  } else if (command.type === "rotate") {
+    if (command.quarterTurns !== 1 && command.quarterTurns !== -1)
+      return failure("invalid-transform", "Rotate by one quarter turn at a time.");
+    replacement = {
+      ...instance,
+      transform: {
+        ...instance.transform,
+        rotation: ((instance.transform.rotation + command.quarterTurns * 90 + 360) %
+          360) as QuarterTurn,
+      },
+    };
+  } else if (command.type === "set-transform") {
+    const previous = instance.transform;
+    if (
+      (["x", "y", "z", "rotation"] as const).every(
+        (key) => previous[key] === command.transform[key],
+      )
+    )
+      return failure("no-change", "This part is already at that position and rotation.");
+    replacement = { ...instance, transform: command.transform };
   } else {
     if (command.delta.x === 0 && command.delta.y === 0 && command.delta.z === 0)
       return failure("no-change", "Choose a nonzero grid movement.");

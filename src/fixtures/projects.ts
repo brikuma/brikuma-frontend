@@ -21,7 +21,7 @@ export const projects: readonly ProjectCardData[] = [
     description:
       "Limestone walls, a terracotta roof, and a quiet courtyard. An original Mediterranean study in miniature.",
     preview: "/assets/previews/masseria.svg",
-    baselineRevision: "masseria-r1",
+    baselineRevision: "masseria-r4",
   },
   {
     id: "rover",
@@ -32,7 +32,7 @@ export const projects: readonly ProjectCardData[] = [
     description:
       "An articulated-looking rover with exposed frame details. Visual construction only; no kinematics simulation.",
     preview: "/assets/previews/rover.svg",
-    baselineRevision: "rover-r1",
+    baselineRevision: "rover-r2",
   },
   {
     id: "creature",
@@ -43,7 +43,7 @@ export const projects: readonly ProjectCardData[] = [
     description:
       "A small brick-built woodland creature with expressive eyes and a warm ochre belly.",
     preview: "/assets/previews/creature.svg",
-    baselineRevision: "creature-r1",
+    baselineRevision: "creature-r2",
   },
 ];
 

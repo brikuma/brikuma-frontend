@@ -13,41 +13,43 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
-      <header className="flex h-16 items-center justify-between gap-4 border-b bg-surface px-4 md:px-6">
-        <Link
-          href="/"
-          className="flex shrink-0 items-center gap-2.5"
-          aria-label="BRIKUMA workspace"
-        >
-          <span className="flex size-8 items-center justify-center rounded-sm bg-primary text-white">
-            <Box size={23} strokeWidth={1.5} />
+      <header className="app-header flex items-center justify-between gap-3 border-b bg-surface px-3 md:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href="/"
+            className="flex shrink-0 items-center gap-2"
+            aria-label="BRIKUMA workspace"
+          >
+            <span className="flex size-7 items-center justify-center rounded-md bg-foreground text-surface">
+              <Box size={19} strokeWidth={1.7} />
+            </span>
+            <span className="text-[15px] font-bold tracking-[-0.04em]">BRIKUMA</span>
+          </Link>
+          <span className="hidden border-l pl-3 text-xs text-muted-foreground sm:block">
+            Design workspace
           </span>
-          <span className="text-lg font-bold tracking-[0.16em]">BRIKUMA</span>
-        </Link>
-        <span className="hidden text-xs tracking-wide text-muted-foreground md:block">
-          IDEAS TAKE SHAPE.
-        </span>
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 rounded-sm border border-border px-2 py-1 text-xs text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-accent" />
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-primary" />
             {copy.preview}
           </span>
           <span
-            className="hidden size-8 items-center justify-center rounded-full bg-primary-muted text-xs font-semibold sm:flex"
+            className="hidden size-7 items-center justify-center rounded-md border bg-background text-xs font-semibold sm:flex"
             aria-label="Example local workspace"
           >
             B
           </span>
         </div>
       </header>
-      <div className="flex min-h-[calc(100dvh-64px)] flex-col md:flex-row">
-        <aside className="no-print flex shrink-0 items-center justify-between border-b bg-surface px-3 md:w-16 md:flex-col md:justify-start md:border-r md:border-b-0 md:px-1 md:py-5">
+      <div className="app-body flex flex-col md:flex-row">
+        <aside className="no-print flex shrink-0 items-center justify-between border-b bg-surface px-2 md:w-14 md:flex-col md:justify-start md:border-r md:border-b-0 md:px-1.5 md:py-3">
           <ActiveNavigation
             items={[
-              { href: "/", label: "Workspace", icon: <LayoutGrid size={20} /> },
-              { href: "/new/", label: "Create", icon: <Plus size={22} /> },
-              { href: "/community/", label: "Community", icon: <Users size={20} /> },
-              { href: "/marketplace/", label: "Marketplace", icon: <Store size={20} /> },
+              { href: "/", label: "Workspace", icon: <LayoutGrid size={18} /> },
+              { href: "/new/", label: "Create", icon: <Plus size={20} /> },
+              { href: "/community/", label: "Community", icon: <Users size={18} /> },
+              { href: "/marketplace/", label: "Marketplace", icon: <Store size={18} /> },
             ]}
           />
           <Link
@@ -55,7 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="icon-button hidden text-muted-foreground md:mt-auto md:flex"
             aria-label="Component guide"
           >
-            <CircleHelp size={20} />
+            <CircleHelp size={18} />
           </Link>
         </aside>
         <main id="main" className="min-w-0 flex-1" tabIndex={-1}>
@@ -77,11 +79,13 @@ export function PageHeading({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-5">
+    <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <p className="eyebrow mb-3">{eyebrow}</p>
-        <h1 className="text-[1.75rem] tracking-tight md:text-[2rem]">{title}</h1>
-        {description && <p className="mt-3 max-w-2xl text-muted-foreground">{description}</p>}
+        <p className="eyebrow mb-2">{eyebrow}</p>
+        <h1 className="text-2xl tracking-[-0.035em] md:text-[1.75rem]">{title}</h1>
+        {description && (
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
       {action}
     </div>
@@ -89,7 +93,7 @@ export function PageHeading({
 }
 export function PageFooter() {
   return (
-    <footer className="mt-12 flex flex-wrap justify-between gap-4 border-t pt-5 text-xs text-muted-foreground">
+    <footer className="mt-10 flex flex-wrap justify-between gap-3 border-t pt-4 text-xs text-muted-foreground">
       <p>{copy.disclaimer}</p>
       <Link href="/plans/" className="inline-flex items-center gap-1">
         Explore the product concept <ArrowUpRight size={14} />

@@ -1,5 +1,9 @@
 import type { Model, PartInstance, QuarterTurn } from "../../core/model/public";
-import type { InstructionSample } from "../scene-types";
+import type {
+  AssemblyModuleDefinition,
+  AssemblyViewMetadata,
+  InstructionSample,
+} from "../scene-types";
 
 /** Deterministic fixture authoring helper; it is never a persistence or service layer. */
 export function part(
@@ -44,5 +48,21 @@ export function instructionSample(model: Model): InstructionSample {
     modelRevision: model.baselineRevision,
     title: `${model.title} · layout sample`,
     steps,
+  };
+}
+
+/** Display metadata records complete authored modules without changing model ownership or counts. */
+export function assemblySample(
+  model: Model,
+  modules: readonly AssemblyModuleDefinition[],
+): AssemblyViewMetadata {
+  const separated = new Set(modules.flatMap((module) => module.partIds));
+  return {
+    modelId: model.id,
+    baselineRevision: model.baselineRevision,
+    modules,
+    fixedPartIds: model.instances
+      .filter((instance) => !separated.has(instance.id))
+      .map((instance) => instance.id),
   };
 }

@@ -156,15 +156,12 @@ describe("FE-006: semantic structure and protection controls", () => {
 });
 
 describe("FE-011 / FE-012: truthful pre-authored change preview", () => {
-  it("requires an explicit apply and does not reinterpret arbitrary typed text", async () => {
+  it("opens a clearly authored suggestion without offering arbitrary text generation", async () => {
     const user = userEvent.setup();
     const command = vi.fn(() => true);
     render(<AssistantPreview model={fixture.model} variant={fixture.variant} command={command} />);
-    const request = screen.getByRole("textbox", {
-      name: "Sample change request",
-    });
-    await user.clear(request);
-    await user.type(request, "Build a spaceship from this text");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByText(/Pre-authored roof alternative/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Preview sample change" }));
     const dialog = screen.getByRole("dialog", { name: "A quieter roofline" });
     expect(command).not.toHaveBeenCalled();

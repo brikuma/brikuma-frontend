@@ -21,35 +21,27 @@ export function AssistantPreview({
   variant: SampleVariant | null;
   command: (command: EditCommand) => boolean;
 }) {
-  const [request, setRequest] = useState("Simplify the roof without changing the facade");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const preview = variant ? previewVariant(model, variant, editPolicy) : null;
   const compatible = preview?.ok === true;
+  if (!variant) return null;
   return (
-    <div className="border-t bg-surface px-4 py-3">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-xs font-medium">
-          <Sparkles size={15} className="text-primary" /> A second perspective
-          <span className="text-muted-foreground">· AI concept preview</span>
-        </p>
-        <span className="hidden text-xs text-muted-foreground sm:block">Pre-authored example</span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <label className="min-w-40 flex-1">
-          <span className="sr-only">Sample change request</span>
-          <input className="field" value={request} onChange={(e) => setRequest(e.target.value)} />
-        </label>
-        <Button variant="primary" disabled={!variant} onClick={() => setOpen(true)}>
-          Preview sample change
-          <ArrowUpRight size={16} />
-        </Button>
-      </div>
-      <p className="mt-1.5 text-xs text-muted-foreground">
-        {variant
-          ? copy.ai
-          : "A sample roof variant is available in the courtyard project. No AI service is connected."}
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-surface px-4 py-1.5">
+      <p className="flex items-center gap-2 text-xs font-medium">
+        <Sparkles size={14} className="text-primary" /> Design study
+        <span className="hidden font-normal text-muted-foreground sm:inline">
+          · Pre-authored roof alternative
+        </span>
       </p>
+      <Button
+        variant="quiet"
+        className="min-h-8 px-2 py-1 text-xs text-primary"
+        onClick={() => setOpen(true)}
+      >
+        Preview sample change
+        <ArrowUpRight size={14} />
+      </Button>
       <Dialog
         open={open}
         onOpenChange={setOpen}

@@ -6,17 +6,17 @@ The single implemented bounded context is **Model Editing**. Catalog presentatio
 
 ## Ubiquitous language
 
-| Term                  | Meaning                                                                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Model                 | Aggregate owning part instances, subassemblies, and the current geometry revision.                                                                                                                                 |
-| Logical part instance | One counted demo part with a stable identifier. Meshes and studs never create inventory identities.                                                                                                                |
-| Subassembly           | A named group owned by one model, with explicit edit protection.                                                                                                                                                   |
-| Part/color key        | Supported catalog identifiers, validated against a supplied editing policy. These are original demo IDs, not verified manufacturer catalog IDs.                                                                    |
-| Grid transform        | Body-center position in stud units and a quarter-turn orientation. Horizontal positions use half-stud increments; vertical positions use tenth-stud increments, accommodating 0.6-unit bricks and 0.2-unit plates. |
-| Baseline revision     | Identity of the curated original geometry.                                                                                                                                                                         |
-| Local revision        | Session-specific geometry identity, allocated by an explicit monotonic session counter. It is neither a timestamp nor a cloud version.                                                                             |
-| Sample variant        | Pre-authored removals/additions compatible with one exact baseline revision.                                                                                                                                       |
-| Memento               | An immutable-by-contract model snapshot used for bounded local history.                                                                                                                                            |
+| Term                  | Meaning                                                                                                                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Model                 | Aggregate owning part instances, subassemblies, and the current geometry revision.                                                                                                                                           |
+| Logical part instance | One counted demo part with a stable identifier. Meshes and studs never create inventory identities.                                                                                                                          |
+| Subassembly           | A named group owned by one model, with explicit edit protection.                                                                                                                                                             |
+| Part/color key        | Supported catalog identifiers, validated against a supplied editing policy. These are original demo IDs, not verified manufacturer catalog IDs.                                                                              |
+| Grid transform        | Body-center position in stud units and a quarter-turn orientation. X/Z positions use tenth-stud increments and Y uses twentieth-stud increments; nominal standard brick and plate body heights are 1.2 and 0.4 stud pitches. |
+| Baseline revision     | Identity of the curated original geometry.                                                                                                                                                                                   |
+| Local revision        | Session-specific geometry identity, allocated by an explicit monotonic session counter. It is neither a timestamp nor a cloud version.                                                                                       |
+| Sample variant        | Pre-authored removals/additions compatible with one exact baseline revision.                                                                                                                                                 |
+| Memento               | An immutable-by-contract model snapshot used for bounded local history.                                                                                                                                                      |
 
 ## Public contract and dependencies
 
@@ -24,15 +24,19 @@ Consumers use [model/public.ts](../../src/core/model/public.ts). The API exposes
 
 `previewVariant` validates the exact pre-authored command against a temporary session and returns only derived prospective quantities. It reuses command validation without changing the caller's model or history. Presentation consumes this result for compatibility, protection explanations, and counts instead of duplicating those rules.
 
+The public API also exposes `getPartConnections`, `worldStudSites`, `findStudContacts` and `hasOccupiedStudSpace` from [connector queries](../../src/core/model/domain/connections.ts). These pure queries describe supported nominal stud/receiver sites, transform them through quarter turns, find coincident vertical contacts and check conservative occupied body bounds against catalog part bodies. They receive definitions/model values explicitly and do not mutate or validate an entire physical assembly. Decorative/custom details can have no supported socket. Coincidence is not proof of clutch, strength, collision-free geometry or manufacturability.
+
 [Domain types](../../src/core/model/domain/types.ts), [validated construction](../../src/core/model/domain/model.ts), and [queries](../../src/core/model/domain/queries.ts) depend only on ECMAScript and other domain files. [Application commands](../../src/core/model/application/commands.ts) coordinate validation and history. No core operation imports fixtures, React, Next.js, Three.js, DOM, Node, storage, timers, HTTP, environment values, or randomness. No external capability is required, so no speculative port or repository exists.
 
 [tsconfig.core.json](../../tsconfig.core.json) compiles the core using only the ES2022 library, `types: []`, strict mode, and no emitted code. Core tests live outside production source in [model.test.ts](../../tests/unit/model.test.ts).
 
 ## Invariants and operations
 
-`createModel` validates unique identities, group ownership, allowed part/color keys, finite grid positions, demo bounds, and the piece limit. It copies input collections and transforms; consumers must honor readonly contracts. The model does not claim to validate connections, collisions, stability, manufacturing dimensions, or buildability.
+`createModel` validates unique identities, group ownership, allowed part/color keys, finite positions on a tenth-stud X/Z grid and twentieth-stud Y grid, demo bounds, and the piece limit. X/Z may be positive or negative within the supplied bounds; Y must be nonnegative and within bounds. It copies input collections and transforms; consumers must honor readonly contracts. The model does not enforce physical connections, collisions, stability, manufacturing dimensions or buildability.
 
-An add/remove/recolor/translate or sample-variant operation validates the entire proposed aggregate before returning a new session. Rejected commands never mutate the input or advance history. A command touching a protected group fails until that group is explicitly unprotected. A sample variant checks both removed and added groups and applies in one history entry.
+An add/remove/recolor/translate/rotate/set-transform/duplicate or sample-variant operation validates the entire proposed aggregate before returning a new session. Duplication receives a new explicit identity and destination transform; it must respect source group protection and the aggregate piece limit. Rejected commands never mutate the input or advance history. A command touching a protected group fails until that group is explicitly unprotected. A sample variant checks both removed and added groups and applies in one history entry.
+
+Core commands remain free-form: overlap and missing stud contacts are not global model invariants. The presentation's [placement feedback](../../src/features/editor/placement-feedback.ts) composes the connector queries for explicit Snap to studs/Ground modes before submitting an add command. Free placement bypasses those assisted-placement checks while retaining ordinary core validation. Numeric transforms, rotation, duplication and direct movement therefore remain available for deliberate composition. The distinction between local geometric assistance and comprehensive physical validation must remain visible.
 
 Geometry or color edits advance a monotonic local revision. Protection changes enter history but preserve geometry revision, because they do not change what an instruction page depicts. Visibility, selection, camera position, exploded layout, and instruction step are presentation state and never change the model or BOM.
 

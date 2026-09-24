@@ -114,7 +114,8 @@ export function Community() {
             “Could we simplify the roof without losing the courtyard’s proportions?”
           </p>
           <p className="mt-3 text-xs text-muted-foreground">
-            Robin Vale · fictional reviewer · masseria-r1 · Roof
+            Robin Vale · fictional reviewer ·{" "}
+            {projects.find((item) => item.id === "masseria")?.baselineRevision} · Roof
           </p>
           <Button className="mt-4" onClick={() => setSelected("masseria")}>
             View revision-specific review

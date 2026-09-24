@@ -14,7 +14,19 @@ export interface PartDefinition {
   readonly height: number;
   readonly depth: number;
   readonly studs: boolean;
-  readonly shape: "brick" | "plate" | "slope" | "cylinder";
+  readonly shape:
+    | "brick"
+    | "plate"
+    | "slope"
+    | "cylinder"
+    | "arch"
+    | "arch-panel"
+    | "arch-spandrel"
+    | "leaf"
+    | "leaf-upright"
+    | "planter"
+    | "roof-tile"
+    | "branch";
 }
 
 export interface PartInstance {
@@ -87,6 +99,14 @@ export type EditCommand =
   | { readonly type: "add"; readonly instance: PartInstance }
   | { readonly type: "remove"; readonly id: string }
   | { readonly type: "recolor"; readonly id: string; readonly colorId: string }
+  | { readonly type: "set-transform"; readonly id: string; readonly transform: GridTransform }
+  | { readonly type: "rotate"; readonly id: string; readonly quarterTurns: 1 | -1 }
+  | {
+      readonly type: "duplicate";
+      readonly id: string;
+      readonly newId: string;
+      readonly transform: GridTransform;
+    }
   | {
       readonly type: "translate";
       readonly id: string;

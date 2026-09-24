@@ -22,9 +22,9 @@ export function isValidTransform(transform: GridTransform, bounds: number): bool
     Math.abs(transform.z) <= bounds &&
     transform.y >= 0 &&
     transform.y <= bounds &&
-    onGrid(transform.x, 0.5) &&
-    onGrid(transform.z, 0.5) &&
-    onGrid(transform.y, 0.1) &&
+    onGrid(transform.x, 0.1) &&
+    onGrid(transform.z, 0.1) &&
+    onGrid(transform.y, 0.05) &&
     [0, 90, 180, 270].includes(transform.rotation)
   );
 }
@@ -49,7 +49,7 @@ export function validateInstance(
   if (!isValidTransform(instance.transform, policy.bounds)) {
     return failure(
       "invalid-transform",
-      "Use half-stud horizontal steps, tenth-stud height steps, and a position inside the demo bounds.",
+      "Use tenth-stud horizontal steps, twentieth-stud height steps, and a position inside the demo bounds.",
     );
   }
   return { ok: true, value: instance };

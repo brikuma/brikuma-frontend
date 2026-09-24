@@ -1,3 +1,4 @@
+import counts from "../../src/fixtures/scene-counts.json";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
@@ -15,9 +16,10 @@ for (const path of [
   test(`FE-019: axe WCAG 2.2 AA diagnostic ${path}`, async ({ page }) => {
     await page.goto(path);
     await expect(page.getByRole("main")).toBeVisible();
-    if (path.startsWith("/editor")) await expect(page.getByTestId("piece-count")).toHaveText("267");
+    if (path.startsWith("/editor"))
+      await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
     if (path.startsWith("/inventory"))
-      await expect(page.getByTestId("inventory-total")).toContainText("267");
+      await expect(page.getByTestId("inventory-total")).toContainText(String(counts.masseria));
     if (path.startsWith("/instructions"))
       await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
     const results = await new AxeBuilder({ page })

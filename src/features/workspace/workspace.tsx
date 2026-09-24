@@ -1,15 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  Plus,
-  Search,
-  Sparkles,
-  SlidersHorizontal,
-  Box,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, Plus, Search, SlidersHorizontal, Box } from "lucide-react";
 import counts from "@/fixtures/scene-counts.json";
 import { projects } from "@/fixtures/projects";
 import { ModelPoster } from "@/components/model-poster";
@@ -26,135 +18,125 @@ export function Workspace() {
   );
   return (
     <div className="page-wrap">
-      <div className="mb-7 flex items-center justify-between">
-        <p className="eyebrow">Your creative workspace</p>
-        <span className="text-xs text-muted-foreground">
-          A little imagination. A world of possibilities.
+      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[1.75rem] tracking-[-0.035em]">Your workspace</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            A blank canvas. An original study. Your next starting point.
+          </p>
+        </div>
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="size-1.5 rounded-full bg-primary" />
+          Local browser session
         </span>
       </div>
-      <section className="relative mb-10 grid overflow-hidden rounded-lg border bg-surface lg:grid-cols-[0.9fr_1.1fr]">
-        <div className="relative z-10 p-6 md:p-10 lg:py-12">
-          <span className="tag mb-6 bg-primary-muted text-primary">
-            <Box size={14} /> From the first brick
+
+      <section aria-label="Start a model" className="mb-9 grid gap-3 sm:grid-cols-2">
+        <Link
+          href="/editor/?project=blank"
+          prefetch={false}
+          aria-label="Start from scratch"
+          className="group flex min-w-0 items-center gap-4 rounded-lg border border-primary/20 bg-surface p-5 transition-colors hover:border-primary/50 hover:bg-primary-muted/30"
+        >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Plus size={23} strokeWidth={1.75} />
           </span>
-          <h1 className="max-w-md text-4xl leading-[1.15] tracking-tight md:text-[2.75rem]">
-            Create something
-            <br />
-            worth building<span className="text-accent">.</span>
-          </h1>
-          <p className="mt-5 max-w-sm text-muted-foreground">
-            A place for curious minds and considered models. Start with an idea. Make it your own,
-            one brick at a time.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Link
-              href="/editor/?project=blank"
-              prefetch={false}
-              className="button button-primary min-h-11"
-            >
-              <Plus size={18} />
-              Start from scratch
-            </Link>
-            <Link href="/editor/?project=masseria" prefetch={false} className="button min-h-11">
-              Explore a sample
-              <ArrowUpRight size={17} />
-            </Link>
-          </div>
-          <p className="mt-6 text-xs text-muted-foreground">
-            No account needed. Explore locally in your browser.
-          </p>
-        </div>
-        <div className="viewport-grid relative min-h-64 bg-surface-muted/50 lg:min-h-[380px]">
-          <ModelPoster
-            id="masseria"
-            title="Mediterranean courtyard"
-            priority
-            className="h-full min-h-64"
-          />
-          <div className="absolute bottom-5 left-5 border-l-2 border-accent pl-3">
-            <p className="text-sm font-medium">A slower kind of architecture.</p>
-            <p className="text-xs text-muted-foreground">
-              Masseria courtyard · Original sample study
+          <div className="min-w-0">
+            <h2 className="text-base">Start from scratch</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              An open canvas and the full part library.
             </p>
           </div>
-          <span className="absolute right-5 top-5 font-mono text-xs text-muted-foreground">
-            STUDY 001
+          <ArrowUpRight size={18} className="ml-auto shrink-0 text-primary" />
+        </Link>
+        <Link
+          href="/new/"
+          aria-label="New project"
+          className="group flex min-w-0 items-center gap-4 rounded-lg border bg-surface p-5 transition-colors hover:border-control-border hover:bg-background"
+        >
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-surface-muted text-foreground">
+            <SlidersHorizontal size={22} strokeWidth={1.75} />
           </span>
-        </div>
+          <div className="min-w-0">
+            <h2 className="text-base">Create a project brief</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Define your idea, materials and constraints.
+            </p>
+          </div>
+          <ArrowUpRight size={18} className="ml-auto shrink-0 text-muted-foreground" />
+        </Link>
       </section>
+
       <section aria-labelledby="projects-heading">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 id="projects-heading" className="text-xl">
-              On your workbench
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <h2 id="projects-heading" className="text-base">
+              Sample projects
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Three starting points. Countless directions.
-            </p>
+            <span className="rounded-sm bg-surface-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+              {models.length}
+            </span>
           </div>
-          <Link href="/new/" className="button">
-            <Plus size={16} />
-            New project
-          </Link>
-        </div>
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex max-w-full flex-wrap gap-1 rounded-md bg-surface-muted p-1">
-            {["All projects", ...new Set(models.map((p) => p.category))].map((category) => (
-              <button
-                key={category}
-                className={`min-h-10 rounded-sm px-3 text-sm ${category === filter ? "bg-surface font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                onClick={() => setFilter(category)}
-                aria-pressed={category === filter}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-          <label className="flex min-h-10 items-center gap-2 rounded-md border border-control-border bg-surface px-3">
-            <Search size={16} className="text-muted-foreground" />
+          <label className="flex min-h-9 max-w-full items-center gap-2 rounded-md border border-control-border bg-surface px-2.5 focus-within:border-primary">
+            <Search size={14} className="shrink-0 text-muted-foreground" />
             <span className="sr-only">Search projects</span>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a project…"
-              className="w-40 bg-transparent text-sm outline-none"
+              placeholder="Search projects…"
+              className="w-44 min-w-0 bg-transparent text-xs outline-none"
             />
           </label>
         </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          {filtered.map((project, index) => (
+        <div className="mb-5 flex max-w-full flex-wrap items-center gap-1 border-b pb-3">
+          {["All projects", ...new Set(models.map((p) => p.category))].map((category) => (
+            <button
+              key={category}
+              className={`min-h-8 rounded-md px-3 text-xs font-medium transition-colors ${category === filter ? "bg-foreground text-surface" : "text-muted-foreground hover:bg-surface-muted hover:text-foreground"}`}
+              onClick={() => setFilter(category)}
+              aria-pressed={category === filter}
+            >
+              {category}
+            </button>
+          ))}
+          <span className="ml-auto pl-2 text-xs text-muted-foreground">
+            Original studies · editable locally
+          </span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((project) => (
             <article
               key={project.id}
-              className="group min-w-0 overflow-hidden rounded-lg border bg-surface"
+              className="group min-w-0 overflow-hidden rounded-lg border bg-surface transition-colors hover:border-control-border"
             >
               <Link
                 href={`/editor/?project=${project.id}`}
                 prefetch={false}
-                className="block"
+                className="block h-full"
                 aria-label={`Open ${project.title}`}
               >
-                <div className="relative h-56 overflow-hidden bg-surface-muted/70">
+                <div className="relative aspect-[4/3] overflow-hidden border-b bg-background">
                   <ModelPoster
                     id={project.id}
                     title={project.title}
-                    className="h-full transition-transform duration-150 group-hover:scale-[1.03] motion-reduce:transform-none"
+                    priority={project.id === "masseria"}
+                    className="h-full p-4 transition-transform duration-150 group-hover:scale-[1.025] motion-reduce:transform-none"
                   />
-                  <span className="absolute left-4 top-4 tag bg-surface/90">
+                  <span className="absolute left-3 top-3 rounded-sm bg-surface/95 px-2 py-1 text-xs font-medium text-muted-foreground">
                     {project.category}
                   </span>
-                  <span className="absolute bottom-3 right-4 font-mono text-xs text-muted-foreground">
-                    0{index + 1}
+                  <span className="absolute bottom-3 right-3 flex size-7 items-center justify-center rounded-md border bg-surface text-muted-foreground group-hover:text-primary">
+                    <ArrowUpRight size={15} />
                   </span>
                 </div>
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <h3 className="text-lg">{project.title}</h3>
-                    <ArrowUpRight size={19} className="text-primary" />
-                  </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{project.approach}</p>
-                  <div className="mt-5 flex justify-between border-t pt-3 text-xs text-muted-foreground">
-                    <span>{counts[project.id]} pieces · Sample</span>
-                    <span>{project.baselineRevision}</span>
+                <div className="p-4">
+                  <h3 className="text-sm">{project.title}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">{project.approach}</p>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5 tabular-nums">
+                      <Box size={13} /> {counts[project.id].toLocaleString("en")} pieces
+                    </span>
+                    <span>Sample · {project.baselineRevision}</span>
                   </div>
                 </div>
               </Link>
@@ -162,9 +144,9 @@ export function Workspace() {
           ))}
         </div>
         {filtered.length === 0 && (
-          <div className="rounded-lg border border-dashed border-control-border py-16 text-center">
-            <Search className="mx-auto mb-3 text-muted-foreground" />
-            <h3>No projects match yet.</h3>
+          <div className="rounded-lg border border-dashed border-control-border bg-surface py-14 text-center">
+            <Search className="mx-auto mb-3 text-muted-foreground" size={24} />
+            <h3 className="text-base">No projects match yet.</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Try another subject or clear your search.
             </p>
@@ -180,32 +162,18 @@ export function Workspace() {
           </div>
         )}
       </section>
-      <section className="mt-10 grid gap-6 border-t pt-8 md:grid-cols-[1fr_1fr]">
-        <Link href="/new/" className="flex items-center gap-5">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-primary-muted text-primary">
-            <SlidersHorizontal size={23} />
-          </span>
-          <div>
-            <h3 className="text-base">Give your idea a brief</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Choose your subject, materials and constraints.
-            </p>
-          </div>
-          <ArrowRight className="ml-auto shrink-0" size={20} />
+
+      <div className="mt-7 flex flex-wrap items-center justify-between gap-3 rounded-md border bg-surface px-4 py-3">
+        <p className="text-xs text-muted-foreground">
+          Projects stay in this browser session. Reloading restores the samples.
+        </p>
+        <Link
+          href="/community/"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-primary"
+        >
+          Explore the community concept <ArrowRight size={14} />
         </Link>
-        <Link href="/plans/" className="flex items-center gap-5 md:border-l md:pl-6">
-          <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-warning-muted text-accent-foreground">
-            <Sparkles size={23} />
-          </span>
-          <div>
-            <h3 className="text-base">More room for imagination</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Explore our free-first, assisted-design concept.
-            </p>
-          </div>
-          <ArrowRight className="ml-auto shrink-0" size={20} />
-        </Link>
-      </section>
+      </div>
       <PageFooter />
     </div>
   );

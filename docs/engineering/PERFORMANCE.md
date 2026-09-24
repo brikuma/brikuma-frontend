@@ -12,7 +12,15 @@ Browser minimums: Next 16.3.6 documents Chrome/Edge 111+, Firefox 111+, Safari 1
 
 Sources: [Web Vitals](https://web.dev/articles/vitals), [Fiber performance](https://r3f.docs.pmnd.rs/advanced/scaling-performance), [Tailwind compatibility](https://tailwindcss.com/docs/compatibility), [Next supported browsers](https://nextjs.org/docs/architecture/supported-browsers).
 
-## Recorded local production measurements
+## Studio revision measurements — 2026-09-24
+
+The final rebuilt studio output passed `npm run perf:check` at 2026-09-24T11:28:20.852Z: workspace JavaScript 192,601 bytes / 188.1 KiB gzip, editor shell 222,497 bytes / 217.3 KiB, initial CSS 8,338 bytes / 8.1 KiB, all remaining lazy chunks 416,853 bytes / 407.1 KiB as a conservative upper bound, and zero downloaded fonts. The courtyard SVG is 1,230,209 bytes raw / 198,393 gzip. Artifacts: `artifacts/performance/budgets.json` and `artifacts/studio-perf.log`. Profile: macOS 27.0 arm64, Node 22.23.3/npm 12.1.0; uncommitted tree based on `ad95c84`. The available toolchain differs from the pinned Node 22.23.2/npm 10.9.8. No budget failed.
+
+The current fixture has 1,171 courtyard parts, a 1,136-part roof alternative, 44 rover parts and 38 creature parts, drawn from 67 definitions. [FE-DEC-011](../DECISIONS.md#fe-dec-011-contemporary-workspace-stud-feedback-and-authored-assemblies) adds the contemporary workspace, nominal stud placement and authored assembly inspection. These features do not certify physical assemblies. The renderer keeps one active canvas; underside inspection and authored module offsets do not create extra canvases or logical parts.
+
+Studio quality adds owned GTAO/contact-shadow passes; Balanced/Performance render directly. Rendering remains demand-driven, with the studio composer DPR capped at 1.5. All three quality levels rendered successfully in the recorded 30-test production Chrome suite, which also checked same-origin asset loading and isolation of renderer/scene chunks from ordinary routes. This is functional evidence, not a measured frame-rate, scene-ready or latency claim. The deterministic suite passed 265 unit/component tests in 16 files; the final targeted responsive rerun passed 8/8 in 15.3 seconds after Structure count and capture corrections (`artifacts/studio-responsive-final.log`). Lighthouse, dependency audits and independent installation were not rerun for this revision; earlier measurements below describe the original checkpoint only. See [current acceptance](../delivery/ACCEPTANCE.md#current-studio-revision-evidence--2026-09-24).
+
+## Initial implementation measurements (historical)
 
 `npm run perf:check` produced `artifacts/performance/budgets.json` at 2026-09-24T08:30:00Z with zero budget failures. It sums gzip sizes of unique initial script/style URLs in each exported HTML page. Remaining output chunks are counted together as a conservative lazy-code upper bound; this does not claim they all transfer on one route or isolate Three.js exactly.
 

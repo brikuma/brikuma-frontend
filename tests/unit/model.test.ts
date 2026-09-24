@@ -32,7 +32,7 @@ const brick: PartInstance = {
   partId: "demo-brick-2x4",
   colorId: "teal",
   groupId: "workspace",
-  transform: { x: 0, y: 0.3, z: 0, rotation: 0 },
+  transform: { x: 0, y: 0.6, z: 0, rotation: 0 },
 };
 
 function edit(session: ModelSession, command: EditCommand): ModelSession {
@@ -51,11 +51,11 @@ describe("FE-005 / FE-022: pure bounded model commands", () => {
     const moved = edit(colored, {
       type: "translate",
       id: brick.id,
-      delta: { x: 1, y: 0.6, z: -0.5 },
+      delta: { x: 1, y: 1.2, z: -0.5 },
     });
     expect(moved.present.instances[0]).toMatchObject({
       colorId: "terracotta",
-      transform: { x: 1, y: 0.9, z: -0.5 },
+      transform: { x: 1, y: 1.8, z: -0.5 },
     });
     expect(deriveBom(moved.present)).toEqual([
       { partId: brick.partId, colorId: "terracotta", quantity: 1 },
@@ -156,7 +156,7 @@ describe("FE-006 / FE-012: protection and compatible sample variants", () => {
     const preview = previewVariant(model, masseria.variant!, editPolicy);
     expect(preview).toEqual({
       ok: true,
-      value: { pieceCount: 252, removedCount: 25, addedCount: 10 },
+      value: { pieceCount: 1136, removedCount: 55, addedCount: 20 },
     });
     const applied = edit(createSession(model), {
       type: "apply-variant",
@@ -164,7 +164,7 @@ describe("FE-006 / FE-012: protection and compatible sample variants", () => {
     });
     expect(value(preview).pieceCount).toBe(applied.present.instances.length);
     expect(JSON.stringify(model)).toBe(before);
-    expect(model.revision).toBe("masseria-r1");
+    expect(model.revision).toBe("masseria-r4");
   });
 
   it("reports stale and protected preview failures through the same edit rules", () => {

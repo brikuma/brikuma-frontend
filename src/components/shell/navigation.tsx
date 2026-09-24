@@ -11,17 +11,20 @@ export function ActiveNavigation({
   return (
     <nav
       aria-label="Global navigation"
-      className="flex w-full justify-around gap-2 md:flex-col md:items-center md:gap-4"
+      className="flex w-full justify-around gap-1 md:flex-col md:items-center md:gap-1.5"
     >
       {items.map((item) => {
-        const active = pathname.replace(/\/$/, "") === item.href.replace(/\/$/, "");
+        const path = pathname.replace(/\/$/, "");
+        const active =
+          path === item.href.replace(/\/$/, "") ||
+          (item.href === "/" && ["/editor", "/instructions", "/inventory"].includes(path));
         return (
           <Link
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
             title={item.label}
-            className={`flex min-h-12 min-w-12 flex-col items-center justify-center gap-1 rounded-md px-1 py-2 text-[0.75rem] md:text-xs ${active ? "bg-primary-muted text-primary" : "text-muted-foreground hover:bg-surface-muted"}`}
+            className="app-navigation-link"
           >
             {item.icon}
             <span className="md:sr-only">{item.label}</span>
