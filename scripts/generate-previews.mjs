@@ -5,6 +5,18 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const require = createRequire(import.meta.url);
+const sceneModules = {
+  masseria: "scenes/masseria",
+  rover: "scenes/rover",
+  creature: "scenes/creature",
+  blank: "scenes/blank",
+  "placement-lab": "editor/placement-lab",
+  "courtyard-study": "editor/courtyard-study",
+};
+const requested = process.argv.slice(2);
+const selectedIds = requested.length ? requested : Object.keys(sceneModules);
+for (const id of selectedIds)
+  if (!Object.hasOwn(sceneModules, id)) throw new Error(`Unknown preview fixture: ${id}`);
 const buildPath = resolve("artifacts/fixture-build");
 mkdirSync(buildPath, { recursive: true });
 writeFileSync(resolve(buildPath, "package.json"), '{"type":"commonjs"}\n');
@@ -23,6 +35,7 @@ execFileSync(
     "--outDir",
     buildPath,
     "src/fixtures/load-scene.ts",
+    "src/fixtures/editor/index.ts",
     "src/fixtures/catalog.ts",
   ],
   { stdio: "inherit" },
@@ -58,7 +71,7 @@ const output = resolve("public/assets/previews");
 mkdirSync(output, { recursive: true });
 const definitions = new Map(partDefinitions.map((part) => [part.id, part]));
 const palette = new Map(colors.map((color) => [color.id, color.hex]));
-const counts = {};
+const counts = JSON.parse(readFileSync("src/fixtures/scene-counts.json", "utf8"));
 const number = (value) => Math.round(value * 10) / 10;
 const project = ([x, y, z]) => [(x - z) * 0.866, (x + z) * 0.48 - y];
 const shade = (color, factor) =>
@@ -347,8 +360,8 @@ function render(model, parts) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="560" viewBox="0 0 800 560" role="img" aria-label="${escape(model.title)}"><title>${escape(model.title)} — original BRIKUMA demo rendering</title><style>.p{stroke:#344248;stroke-opacity:.17;stroke-width:.55;stroke-linejoin:round}</style><defs><g id="stud"><ellipse cy="${number(scale * 0.1)}" rx="${number(scale * 0.3)}" ry="${number(scale * 0.17)}" fill="currentColor"/><ellipse cy="${number(scale * 0.1)}" rx="${number(scale * 0.3)}" ry="${number(scale * 0.17)}" fill="#000" opacity=".2"/><ellipse cy="${number(-scale * 0.1)}" rx="${number(scale * 0.3)}" ry="${number(scale * 0.16)}" fill="currentColor" stroke="#fff" stroke-opacity=".35" stroke-width=".6"/></g><radialGradient id="bg"><stop stop-color="#FCFAF4"/><stop offset="1" stop-color="#E9E7DC"/></radialGradient><filter id="shadow" x="-.3" y="-.5" width="1.6" height="2"><feGaussianBlur stdDeviation="13"/></filter></defs><path fill="url(#bg)" d="M0 0H800V560H0Z"/><ellipse cx="405" cy="${number(offsetY + maxY * scale - 7)}" rx="${number((maxX - minX) * scale * 0.39)}" ry="30" fill="#344248" opacity=".14" filter="url(#shadow)"/>${shapes.join("")}</svg>\n`;
 }
 
-for (const id of ["masseria", "rover", "creature", "blank"]) {
-  const fixture = require(resolve(buildPath, `fixtures/scenes/${id}.js`)).fixture;
+for (const id of selectedIds) {
+  const fixture = require(resolve(buildPath, `fixtures/${sceneModules[id]}.js`)).fixture;
   counts[id] = fixture.model.instances.length;
   writeFileSync(resolve(output, `${id}.svg`), render(fixture.model, fixture.model.instances));
   if (fixture.variant) {
@@ -376,4 +389,7 @@ for (const id of ["masseria", "rover", "creature", "blank"]) {
 }
 writeFileSync(resolve("src/fixtures/scene-counts.json"), `${JSON.stringify(counts, null, 2)}\n`);
 for (const geometry of architecturalGeometry.values()) geometry?.dispose();
-console.log("Generated original scene previews and counts:", counts);
+console.log(
+  "Generated original scene previews and counts:",
+  Object.fromEntries(selectedIds.map((id) => [id, counts[id]])),
+);

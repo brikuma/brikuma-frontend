@@ -11,11 +11,14 @@ import {
 import { useSearchParams } from "next/navigation";
 import {
   applyCommand,
+  acceptExperiment,
+  type ExperimentPreview,
   createSession,
   undo,
   redo,
   type EditCommand,
   type ModelSession,
+  type Model,
 } from "@/core/model/public";
 import { editPolicy } from "@/fixtures/catalog";
 import { loadScene } from "@/fixtures/load-scene";
@@ -27,7 +30,8 @@ type State = Partial<Record<ProjectId, Entry>>;
 type Action =
   | { type: "loaded"; id: ProjectId; fixture: SceneFixture }
   | { type: "update"; id: ProjectId; session: ModelSession }
-  | { type: "reset"; id: ProjectId };
+  | { type: "reset"; id: ProjectId }
+  | { type: "replace"; id: ProjectId; fixture: SceneFixture };
 function reducer(state: State, action: Action): State {
   if (action.type === "loaded")
     return state[action.id]
@@ -36,6 +40,11 @@ function reducer(state: State, action: Action): State {
           ...state,
           [action.id]: { fixture: action.fixture, session: createSession(action.fixture.model) },
         };
+  if (action.type === "replace")
+    return {
+      ...state,
+      [action.id]: { fixture: action.fixture, session: createSession(action.fixture.model) },
+    };
   const entry = state[action.id];
   if (!entry) return state;
   return {
@@ -106,6 +115,25 @@ export function useProject() {
     loadError,
     command,
     history,
+    acceptExperiment: (preview: ExperimentPreview) => {
+      if (!entry) return false;
+      const result = acceptExperiment(entry.session, preview, editPolicy);
+      if (!result.ok) {
+        setMessage(result.error.message);
+        return false;
+      }
+      dispatch({ type: "update", id, session: result.value });
+      setMessage("Local experiment applied in one transaction.");
+      return true;
+    },
+    replaceModel: (model: Model) => {
+      dispatch({ type: "replace", id, fixture: { model, variant: null, instructions: null } });
+      setMessage("Local project loaded. No upload or cloud save occurred.");
+    },
+    replaceFixture: (fixture: SceneFixture) => {
+      dispatch({ type: "replace", id, fixture });
+      setMessage("Original local sample opened.");
+    },
     reset: () => {
       dispatch({ type: "reset", id });
       setMessage("Baseline restored in this session.");

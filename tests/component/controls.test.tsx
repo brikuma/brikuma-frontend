@@ -70,8 +70,9 @@ describe("FE-007: local part catalog", () => {
     const add = vi.fn();
     render(<PartCatalog onAdd={add} />);
     await user.type(screen.getByRole("textbox", { name: "Search part catalog" }), "unlisted");
-    expect(screen.getByText("No demo parts match this search.")).toBeVisible();
-    await user.clear(screen.getByRole("textbox", { name: "Search part catalog" }));
+    expect(screen.getByText("No demo parts match “unlisted” in all.")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByRole("textbox", { name: "Search part catalog" })).toHaveValue("");
     await user.selectOptions(screen.getByRole("combobox", { name: "Part category" }), "slope");
     await user.selectOptions(screen.getByRole("combobox", { name: "New part color" }), "teal");
     await user.click(screen.getByRole("button", { name: "Add Roof slope 2 × 4" }));

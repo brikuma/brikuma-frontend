@@ -2,6 +2,11 @@ import counts from "../../src/fixtures/scene-counts.json";
 import { expect, test, type Page } from "@playwright/test";
 
 const projectNav = (page: Page) => page.getByRole("navigation", { name: "Project navigation" });
+async function navigateProject(page: Page, name: string) {
+  if ((await projectNav(page).count()) === 0)
+    await page.getByRole("button", { name: "Local project files", exact: true }).click();
+  await projectNav(page).getByRole("link", { name, exact: true }).click();
+}
 
 test("FE-002: workspace categories, search, empty state and a direct sample route", async ({
   page,
@@ -21,24 +26,29 @@ test("FE-002: workspace categories, search, empty state and a direct sample rout
   ).toBeVisible();
 });
 
-test("FE-006 / FE-012: protect facade, compare an authored roof, apply and undo", async ({
+test("FE-006 / EDT-042: protect facade, preview a roof color, accept and undo", async ({
   page,
 }) => {
   await page.goto("/editor/?project=masseria&noWebgl=1");
   await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
+  await page.getByRole("button", { name: "Structure", exact: true }).click();
   await page.getByRole("button", { name: "Select Facade", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeDisabled();
-  await expect(
-    page.getByText("Protected Facade. Unlock it in Structure before editing."),
-  ).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Selection color", exact: true })).toBeDisabled();
+  await expect(page.getByText("Protected scope: the entire edit is blocked.")).toBeVisible();
   await page.getByRole("button", { name: "Select Roof", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Preview sample change" }).click();
-  const dialog = page.getByRole("dialog", { name: "A quieter roofline" });
-  await expect(dialog).toContainText("pre-authored");
-  await dialog.getByRole("button", { name: "Apply pre-authored variant" }).click();
-  await expect(page.getByTestId("piece-count")).toHaveText("1136");
+  await expect(page.getByRole("combobox", { name: "Selection color", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Changes · local experiment" }).click();
+  await page.getByRole("button", { name: "Preview local edit", exact: true }).click();
+  await expect(
+    page.getByText("Protection check: passed at preview.", { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
+  await page.getByRole("button", { name: "Accept edit", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Selection color", exact: true })).toHaveValue(
+    "teal",
+  );
   await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(page.getByText("1 undoable changes", { exact: true })).toBeVisible();
   await expect(page.getByText("masseria-local-1", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Undo local edit" }).click();
   await expect(page.getByText("masseria-r4", { exact: true }).first()).toBeVisible();
@@ -49,7 +59,6 @@ test("FE-005 / FE-008 / FE-013: a blank scene remains coherent across navigation
 }) => {
   await page.goto("/editor/?project=blank&noWebgl=1");
   await expect(page.getByTestId("piece-count")).toHaveText("0");
-  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
@@ -61,13 +70,13 @@ test("FE-005 / FE-008 / FE-013: a blank scene remains coherent across navigation
   await expect(page.getByTestId("piece-count")).toHaveText("0");
   await page.getByRole("button", { name: "Undo local edit" }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("1");
-  await projectNav(page).getByRole("link", { name: "Parts inventory" }).click();
+  await navigateProject(page, "Parts inventory");
   await expect(page.getByTestId("inventory-total")).toContainText("1");
   await expect(page.getByRole("cell", { name: "Deep teal", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Search inventory" }).fill("absent-part");
   await expect(page.getByRole("heading", { name: "No parts match these filters." })).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
-  await projectNav(page).getByRole("link", { name: "Workbench" }).click();
+  await navigateProject(page, "Workbench");
   await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("added-1");
   await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toHaveValue("teal");
@@ -85,10 +94,10 @@ test("FE-009: instruction navigation, real drawing zoom and stale revision", asy
   await expect(page.getByText("125%", { exact: true })).toBeVisible();
   const after = await picture.boundingBox();
   expect(after!.width).toBeGreaterThan(before!.width);
-  await projectNav(page).getByRole("link", { name: "Workbench" }).click();
-  await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+  await navigateProject(page, "Workbench");
+  await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-bed-0--1");
   await page.getByRole("button", { name: "Move x positive" }).click();
-  await projectNav(page).getByRole("link", { name: "Instructions", exact: true }).click();
+  await navigateProject(page, "Instructions");
   await expect(page.getByText(/Instruction sample belongs to the original revision/)).toBeVisible();
   await expect(page.getByText(/Instruction sample masseria-instructions-r4/)).toBeVisible();
 });
@@ -97,10 +106,11 @@ test("Studio: precise placement, rotation and duplication remain reversible acro
   page,
 }) => {
   await page.goto("/editor/?project=blank&noWebgl=1");
-  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
   await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill("2.5");
+  await page.getByRole("button", { name: "Free position", exact: true }).click();
+  await page.getByRole("button", { name: "Update preview", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await page.getByRole("button", { name: "Rotate 90°", exact: true }).click();
   await expect(page.getByText("Rotation 90°", { exact: true })).toBeVisible();
@@ -113,23 +123,29 @@ test("Studio: precise placement, rotation and duplication remain reversible acro
   await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.getByRole("button", { name: "Redo local edit", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("2");
-  await projectNav(page).getByRole("link", { name: "Parts inventory", exact: true }).click();
+  await navigateProject(page, "Parts inventory");
   await expect(page.getByTestId("inventory-total")).toContainText("2");
-  await projectNav(page).getByRole("link", { name: "Workbench", exact: true }).click();
+  await navigateProject(page, "Workbench");
   await expect(page.getByTestId("piece-count")).toHaveText("2");
-  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 1 × 1", exact: true }).click();
   await page.getByRole("button", { name: "Cancel placement", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("2");
 });
 
-test("FE-012: a stale sample cannot overwrite another local edit", async ({ page }) => {
+test("EDT-042: a stale local experiment cannot overwrite a later edit", async ({ page }) => {
   await page.goto("/editor/?project=masseria&noWebgl=1");
+  await page.getByRole("button", { name: "Structure", exact: true }).click();
   await page.getByRole("button", { name: "Select Roof", exact: true }).click();
-  await page.getByRole("button", { name: "Move z positive" }).click();
-  await page.getByRole("button", { name: "Preview sample change" }).click();
-  await expect(page.getByRole("alert")).toContainText("Revision conflict");
-  await expect(page.getByRole("button", { name: "Apply pre-authored variant" })).toBeDisabled();
+  await page.getByRole("button", { name: "Changes · local experiment" }).click();
+  await page.getByRole("button", { name: "Preview local edit", exact: true }).click();
+  await page.getByRole("button", { name: "Current", exact: true }).click();
+  await page.getByRole("combobox", { name: "Selection color", exact: true }).selectOption("ochre");
+  await expect(page.getByText("This proposal is stale.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept edit", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Selection color", exact: true })).toHaveValue(
+    "ochre",
+  );
 });
 
 test("FE-003: browser-local references reject unsupported input and show PDF metadata", async ({
@@ -174,7 +190,7 @@ test("FE-001 / FE-019: static direct routes, unknown query and WebGL fallback", 
   await expect(page.getByText("Unknown project. Showing the courtyard sample.")).toBeVisible();
   await expect(page.getByText(/WebGL is unavailable/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry interactive 3D" })).toBeVisible();
-  await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+  await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-bed-0--1");
   await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
   await page.reload();
   await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { LockKeyhole, Move, Trash2, Copy, RotateCw, Plus } from "lucide-react";
 import {
   getPartConnections,
+  isGroupProtected,
   findStudContacts,
   type Model,
   type EditCommand,
@@ -59,6 +60,16 @@ function PositionFields({
               disabled={disabled}
               value={position[axis]}
               onChange={(event) => setPosition({ ...position, [axis]: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  setPosition({
+                    x: String(part.transform.x),
+                    y: String(part.transform.y),
+                    z: String(part.transform.z),
+                  });
+                }
+              }}
             />
           </label>
         ))}
@@ -77,6 +88,7 @@ export function SelectionInspector({
   command,
   onDuplicate,
   onOpenCatalog,
+  readOnly = false,
 }: {
   model: Model;
   selected: string | null;
@@ -84,12 +96,13 @@ export function SelectionInspector({
   command: (command: EditCommand) => boolean;
   onDuplicate?: (id: string) => void;
   onOpenCatalog?: () => void;
+  readOnly?: boolean;
 }) {
   const part = model.instances.find((part) => part.id === selected);
   const definition = partDefinitions.find((p) => p.id === part?.partId);
   const group = model.groups.find((g) => g.id === part?.groupId);
   const color = colors.find((item) => item.id === part?.colorId) ?? colors[0];
-  const protectedPart = Boolean(group?.protected);
+  const protectedPart = readOnly || Boolean(part && isGroupProtected(model, part.groupId));
   const connections = definition ? getPartConnections(definition) : null;
   const contacts =
     definition && part
@@ -155,7 +168,9 @@ export function SelectionInspector({
             {protectedPart && (
               <p className="mb-4 flex items-start gap-2 rounded-md bg-warning-muted p-3 text-xs text-warning">
                 <LockKeyhole size={15} className="shrink-0" />
-                Protected {group?.name}. Unlock it in Structure before editing.
+                {readOnly
+                  ? "Return to assembled Build to edit."
+                  : `Protected ${group?.name}. Unlock it in Structure before editing.`}
               </p>
             )}
             <label className="block text-xs font-medium">

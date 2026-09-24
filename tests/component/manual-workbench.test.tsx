@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Workbench } from "../../src/features/editor/workbench";
 import { SessionProvider } from "../../src/features/editor/state/session";
 import { partDefinitions } from "../../src/fixtures/catalog";
@@ -25,6 +25,22 @@ vi.mock("../../src/features/editor/components/model-viewport", () => ({
     </div>
   ),
 }));
+beforeEach(() => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches: query.includes("1024") || query.includes("1280"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+});
 afterEach(cleanup);
 
 describe("Manual building through accessible controls", () => {
@@ -36,10 +52,9 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     await screen.findByTestId("piece-count");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     for (const [index, definition] of partDefinitions.entries()) {
       await user.click(screen.getByRole("button", { name: `Add ${definition.name}` }));
-      await user.click(screen.getByRole("button", { name: "Free" }));
+      await user.click(screen.getByRole("button", { name: "Free position" }));
       await user.click(screen.getByRole("button", { name: "Place brick" }));
       expect(screen.getByTestId("piece-count")).toHaveTextContent(new RegExp(`^${index * 2 + 1}$`));
       await user.click(screen.getByRole("button", { name: "Rotate 90°" }));
@@ -56,13 +71,14 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     expect(await screen.findByTestId("piece-count")).toHaveTextContent("0");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent("0");
     expect(screen.getByTestId("pending-model-part")).toHaveTextContent("demo-brick-2x4");
     const x = screen.getByRole("spinbutton", { name: "Placement X" });
     await user.clear(x);
     await user.type(x, "2.5");
+    await user.click(screen.getByRole("button", { name: "Free position" }));
+    await user.click(screen.getByRole("button", { name: "Update preview" }));
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent("1");
     expect(screen.getByTestId("pending-model-part")).toHaveTextContent("No pending part");
@@ -86,41 +102,37 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     expect(await screen.findByTestId("piece-count")).toHaveTextContent(/^0$/);
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
-    expect(screen.getByRole("button", { name: "Snap to studs" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent(/^1$/);
     await user.click(screen.getByRole("button", { name: "Activity" }));
     expect(screen.getByText("1 undoable changes")).toBeVisible();
-    expect(screen.getByText("blank-local-1", { exact: true })).toBeVisible();
+    expect(screen.getAllByText("blank-local-1", { exact: true })[0]).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     expect(screen.getByRole("spinbutton", { name: "Placement X" })).toHaveValue(0);
     expect(screen.getByRole("spinbutton", { name: "Placement Y" })).toHaveValue(0.6);
     expect(screen.getByRole("spinbutton", { name: "Placement Z" })).toHaveValue(0);
     await user.click(screen.getByRole("button", { name: "Place brick" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Space occupied");
+    expect(screen.getByRole("status")).toHaveTextContent("Occupied-volume conflict");
     expect(screen.getByTestId("canvas-model-count")).toHaveTextContent(/^1$/);
     expect(screen.getByText("1 undoable changes")).toBeVisible();
-    expect(screen.getByText("blank-local-1", { exact: true })).toBeVisible();
+    expect(screen.getAllByText("blank-local-1", { exact: true })[0]).toBeVisible();
     expect(screen.getByRole("button", { name: "Redo local edit" })).toBeDisabled();
     expect(screen.getByTestId("pending-model-part")).toHaveTextContent("demo-brick-2x4");
 
-    await user.click(screen.getByRole("button", { name: "Free" }));
+    await user.click(screen.getByRole("button", { name: "Free position" }));
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent(/^2$/);
     expect(screen.getByTestId("pending-model-part")).toHaveTextContent("No pending part");
-    expect(screen.getByRole("status")).not.toHaveTextContent("Space occupied");
+    expect(screen.getByRole("status")).not.toHaveTextContent("Occupied-volume conflict");
     expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0);
     expect(screen.getByRole("spinbutton", { name: "Position Y" })).toHaveValue(0.6);
     expect(screen.getByRole("spinbutton", { name: "Position Z" })).toHaveValue(0);
     await user.click(screen.getByRole("button", { name: "Activity" }));
     expect(screen.getByText("2 undoable changes")).toBeVisible();
-    expect(screen.getByText("blank-local-2", { exact: true })).toBeVisible();
+    expect(screen.getAllByText("blank-local-2", { exact: true })[0]).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Undo local edit" }));
     expect(screen.getByTestId("canvas-model-count")).toHaveTextContent(/^1$/);
     expect(screen.getByText("1 undoable changes")).toBeVisible();
@@ -134,7 +146,6 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     await screen.findByTestId("piece-count");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     await user.click(screen.getByRole("button", { name: "Cancel placement" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent("0");
@@ -150,9 +161,8 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     expect(await screen.findByTestId("piece-count")).toHaveTextContent(/^0$/);
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "Add Roof tile slope 1 × 1" }));
-    await user.click(screen.getByRole("button", { name: "Ground plane" }));
+    await user.click(screen.getByRole("button", { name: "Grid" }));
     expect(screen.getByRole("spinbutton", { name: "Placement Y" })).toHaveValue(0.15);
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent(/^1$/);
@@ -170,7 +180,6 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     await screen.findByTestId("piece-count");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "New brick color: Deep teal" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     expect(screen.getByRole("combobox", { name: "Pending brick color" })).toHaveValue("teal");
@@ -186,12 +195,9 @@ describe("Manual building through accessible controls", () => {
     const dimensions = screen.getByLabelText("Placement dimensions");
     expect(within(dimensions).getByText("Width").nextElementSibling).toHaveTextContent("2");
     expect(within(dimensions).getByText("Depth").nextElementSibling).toHaveTextContent("4");
-    await user.click(screen.getByRole("button", { name: "Ground plane" }));
-    expect(screen.getByRole("button", { name: "Ground plane" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Snap to studs" })).toHaveAttribute(
+    await user.click(screen.getByRole("button", { name: "Grid" }));
+    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Connect" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -211,9 +217,9 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     await screen.findByTestId("piece-count");
+    await user.click(screen.getByRole("button", { name: "Structure" }));
     await user.click(screen.getByRole("button", { name: "Hide Free-form workspace" }));
-    expect(screen.getByTestId("hidden-model-groups")).toHaveTextContent("workspace");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
+    await user.click(screen.getByRole("button", { name: /^Parts$/ }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     expect(screen.getByTestId("hidden-model-groups")).toHaveTextContent("No hidden groups");
@@ -232,7 +238,6 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     await screen.findByTestId("piece-count");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     await user.click(screen.getByRole("button", { name: "Reset demo" }));
@@ -252,11 +257,12 @@ describe("Manual building through accessible controls", () => {
       </SessionProvider>,
     );
     await screen.findByTestId("piece-count");
-    await user.click(screen.getByRole("button", { name: "Add a brick" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
     await user.click(screen.getByRole("button", { name: "Place brick" }));
     screen.getByRole("region", { name: /^Modeling workspace/ }).focus();
     await user.keyboard("{ArrowRight}r");
+    expect(screen.getByText("Rotation 0°")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Rotate 90°" }));
     expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0.5);
     expect(screen.getByText("Rotation 90°")).toBeVisible();
     const x = screen.getByRole("spinbutton", { name: "Position X" });

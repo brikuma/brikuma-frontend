@@ -38,6 +38,7 @@ test("FE-019: responsive editor, reduced motion and screenshot matrix", async ({
         name: "Parts & structure",
         exact: true,
       });
+      await dialog.getByRole("button", { name: "Structure", exact: true }).click();
       await expect(dialog.getByRole("button", { name: "Select Roof" })).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);
@@ -62,7 +63,9 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
     page.getByRole("heading", { name: "The courtyard house", exact: true, level: 1 }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
-  await expect(page.getByText("Drag to orbit · Scroll to zoom · Click a brick")).toBeVisible({
+  await expect(
+    page.getByText("Right drag orbit · middle drag pan · scroll zoom · click selects"),
+  ).toBeVisible({
     timeout: 20000,
   });
   await page.screenshot({
@@ -86,12 +89,14 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
   await page.getByRole("button", { name: "Show dimensions", exact: true }).click();
   await expect(page.getByRole("button", { name: "Show dimensions", exact: true })).toHaveAttribute(
     "aria-pressed",
-    "false",
+    "true",
   );
   await page.getByRole("button", { name: "Show dimensions", exact: true }).click();
   await page.getByRole("button", { name: "Show workspace grid", exact: true }).click();
   await page.getByRole("button", { name: "Reset camera", exact: true }).click();
+  await page.getByRole("button", { name: "Structure", exact: true }).click();
   await page.getByRole("button", { name: "Select Roof" }).click();
+  await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
   await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Zoom in model" }).click();
   await page.getByRole("button", { name: "Reset camera" }).click();
@@ -143,7 +148,7 @@ test("FE-019: mobile starts as a deliberate viewer with accessible inspector", a
   await page.goto("/editor/?project=masseria");
   await expect(page.getByRole("button", { name: "Activate interactive 3D" })).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
-  await expect(page.getByText("Precision placement is best on desktop.")).toBeVisible();
+  await expect(page.getByText(/Precision placement is best on desktop/)).toBeVisible();
   await page.screenshot({
     path: "artifacts/screenshots/editor-mobile-390x844.png",
     fullPage: true,
@@ -163,7 +168,6 @@ test("Studio: canvas dragging commits once and pointer cancellation leaves the m
   await page.goto("/editor/?project=blank");
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
   await page.getByRole("button", { name: "Front view", exact: true }).click();
-  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await expect(page.getByRole("button", { name: "Isometric view", exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -208,6 +212,33 @@ test("Studio: canvas dragging commits once and pointer cancellation leaves the m
   await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).not.toHaveValue(
     "0",
   );
+  await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
+  const revision = await page.locator(".workbench-shell").getAttribute("data-revision");
+  // EDT-018/019: capture survives leaving/re-entering; an unseen release cancels.
+  await page.mouse.click(x, y);
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", revision!);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 12, y, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", revision!);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x - 12, y, { steps: 8 });
+  await page.mouse.move(x + 65, y + 15, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).not.toHaveValue(
+    "0",
+  );
+  await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", revision!);
+  // EDT-020: the native window interruption handler cancels an active real-pointer drag.
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 65, y + 15, { steps: 8 });
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.mouse.up();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", revision!);
 });
 
 test("Studio: surface placement aligns a single brick to the support connectors", async ({
@@ -215,11 +246,11 @@ test("Studio: surface placement aligns a single brick to the support connectors"
 }) => {
   await page.goto("/editor/?project=blank");
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
-  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await page.getByRole("button", { name: "Top view", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 1 × 1", exact: true }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2 + 4, box.y + box.height / 2 + 4);
   await expect(page.getByText("1 stud aligned · click to attach").first()).toBeVisible();
@@ -246,7 +277,6 @@ test("Studio: brick inspection exposes the underside without changing the assemb
 }) => {
   await page.goto("/editor/?project=blank");
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
-  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await page.getByRole("button", { name: "Inspect selected brick", exact: true }).click();
@@ -258,9 +288,9 @@ test("Studio: brick inspection exposes the underside without changing the assemb
   await page.screenshot({ path: "artifacts/screenshots/brick-inspection-top.png" });
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.6);
-  await page.mouse.down();
+  await page.mouse.down({ button: "right" });
   await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.35, { steps: 12 });
-  await page.mouse.up();
+  await page.mouse.up({ button: "right" });
   await page.screenshot({ path: "artifacts/screenshots/brick-inspection-underside.png" });
   await page.setViewportSize({ width: 320, height: 568 });
   await page.getByRole("button", { name: "Reset camera", exact: true }).click();
@@ -276,9 +306,9 @@ test("Studio: brick inspection exposes the underside without changing the assemb
   await expect(
     page.getByRole("button", { name: "Inspect selected brick", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByTestId("piece-count")).toHaveText("1");
+  await expect(page.locator("[data-count]")).toHaveAttribute("data-count", "1");
   await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
-  await expect(page.getByTestId("piece-count")).toHaveText("0");
+  await expect(page.locator("[data-count]")).toHaveAttribute("data-count", "0");
 });
 
 test("FE-019: narrow routes reflow without page-level horizontal overflow", async ({ page }) => {
@@ -326,7 +356,9 @@ test("FE-019: a browser with WebGL disabled preserves the full fallback", async 
     await page.goto(`${baseURL}/editor/?project=masseria`);
     await expect(page.getByText(/WebGL is unavailable/)).toBeVisible({ timeout: 20000 });
     await expect(page.getByRole("button", { name: "Retry interactive 3D" })).toBeVisible();
+    await page.getByRole("button", { name: "Structure", exact: true }).click();
     await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+    await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
     await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
     await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
   } finally {

@@ -112,7 +112,23 @@ export function PartCatalog({
           </button>
         ))}
       </div>
-      {filtered.length === 0 && <p className="notice">No demo parts match this search.</p>}
+      {filtered.length === 0 && (
+        <div className="notice">
+          <p>
+            No demo parts match “{search}” in {shape}.
+          </p>
+          <p className="mt-2 text-xs">Try “Brick”, “Plate”, or “Tile”.</p>
+          <button
+            className="button mt-2"
+            onClick={() => {
+              setSearch("");
+              setShape("all");
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
       <p className="flex items-start gap-2 border-t pt-3 text-xs text-muted-foreground">
         <Box size={14} className="mt-0.5 shrink-0" />
         Original approximations, not verified manufacturer catalog parts.

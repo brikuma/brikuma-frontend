@@ -1,6 +1,14 @@
 "use client";
 import dynamic from "next/dynamic";
-import { Component, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Component,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   MousePointer2,
   Move,
@@ -17,6 +25,7 @@ import {
 } from "lucide-react";
 import { ModelPoster } from "@/components/model-poster";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { partDefinitions, colors } from "@/fixtures/catalog";
 import { placementFeedback } from "../placement-feedback";
 import { createAssemblyView, type AssemblyViewMode } from "../assembly-view";
@@ -25,6 +34,10 @@ import type {
   ModelViewportProps,
   RenderQuality,
   ViewportTool,
+  CameraProjection,
+  CameraAction,
+  ImageExportRequest,
+  EditorMode,
 } from "../viewport-types";
 const Scene = dynamic(() => import("../scene/model-scene"), {
   ssr: false,
@@ -34,20 +47,44 @@ const Scene = dynamic(() => import("../scene/model-scene"), {
     </div>
   ),
 });
+function StaticPreview({ id, title, className }: { id: string; title: string; className: string }) {
+  return ["blank", "masseria", "rover", "creature", "placement-lab", "courtyard-study"].includes(
+    id,
+  ) ? (
+    <ModelPoster id={id} title={title} className={className} />
+  ) : (
+    <div
+      className={`${className} flex items-center justify-center p-6 text-center text-sm text-muted-foreground`}
+    >
+      No static preview for this local model. Structure and HTML edits remain available.
+    </div>
+  );
+}
 class SceneBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
+  { children: ReactNode; fallback: ReactNode; onFailure: () => void },
   { failed: boolean }
 > {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
   }
+  componentDidCatch() {
+    this.props.onFailure();
+  }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
   }
 }
 export function ModelViewport(props: ModelViewportProps) {
-  const { model, selected, placement, onCancelPlacement, onMove } = props;
+  const {
+    model,
+    selected,
+    placement,
+    onCancelPlacement,
+    onMove,
+    onEditingLockChange,
+    onCancelInteraction,
+  } = props;
   const [active, setActive] = useState(false);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
@@ -65,27 +102,121 @@ export function ModelViewport(props: ModelViewportProps) {
   );
   const [zoom, setZoom] = useState(1);
   const [reset, setReset] = useState(0);
-  const [quality, setQuality] = useState<RenderQuality>("studio");
+  const [quality, setQuality] = useState<RenderQuality>("standard");
+  const [projection, setProjection] = useState<CameraProjection>("orthographic");
+  const [projectionMode, setProjectionMode] = useState<EditorMode>(props.mode ?? "build");
+  const [modeProjections, setModeProjections] = useState<
+    Partial<Record<EditorMode, CameraProjection>>
+  >({});
+  if (projectionMode !== (props.mode ?? "build")) {
+    const nextMode = props.mode ?? "build";
+    setModeProjections({ ...modeProjections, [projectionMode]: projection });
+    setProjection(modeProjections[nextMode] ?? projection);
+    setProjectionMode(nextMode);
+  }
+  const [navigation, setNavigation] = useState<"mouse" | "trackpad" | "touch">("mouse");
+  const [cameraAction, setCameraAction] = useState<CameraAction>();
+  const [fitSelection, setFitSelection] = useState(false);
+  const [selectThrough, setSelectThrough] = useState(false);
+  const [pickCandidates, setPickCandidates] = useState<readonly string[]>([]);
+  const [exportRequest, setExportRequest] = useState<ImageExportRequest | null>(null);
+  const [exportSize, setExportSize] = useState<1024 | 2048>(1024);
+  const [transparentExport, setTransparentExport] = useState(false);
+  const [presentationPreset, setPresentationPreset] = useState<"neutral" | "warm" | "transparent">(
+    "neutral",
+  );
+  const [exportMessage, setExportMessage] = useState("");
+  const exportComplete = useCallback((blob: Blob | null, message: string) => {
+    setExportRequest(null);
+    setExportMessage(message);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "brikuma-scene.png";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }, []);
   const [view, setView] = useState<CameraView>("iso");
   const [fitRequest, setFitRequest] = useState(0);
-  const [showGrid, setShowGrid] = useState(false);
-  const [showDimensions, setShowDimensions] = useState(true);
+  const [handledViewRequest, setHandledViewRequest] = useState(-1);
+  if (props.viewRequest && props.viewRequest.serial !== handledViewRequest) {
+    setHandledViewRequest(props.viewRequest.serial);
+    setView(props.viewRequest.view);
+    setFitSelection(false);
+    setFitRequest((value) => value + 1);
+    setZoom(1);
+  }
+  const [showGrid, setShowGrid] = useState(true);
+  const [showDimensions, setShowDimensions] = useState(false);
   const [tool, setTool] = useState<ViewportTool>("select");
+  const [rotationPreview, setRotationPreview] = useState<90 | -90 | null>(null);
+  const [rotationBase, setRotationBase] = useState("");
+  const rotationKey = `${model.revision}:${selected}:${props.selectedIds?.join(",") ?? selected}`;
+  const rotationCurrent = rotationBase === rotationKey;
+  function previewRotation(degrees: 90 | -90) {
+    setRotationBase(rotationKey);
+    setRotationPreview(degrees);
+  }
+  const [contextCommands, setContextCommands] = useState(false);
+  const secondaryGesture = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const [inspection, setInspection] = useState(false);
+  const [handledAssembledReset, setHandledAssembledReset] = useState(props.assembledResetRequest);
+  if (props.assembledResetRequest !== handledAssembledReset) {
+    setHandledAssembledReset(props.assembledResetRequest);
+    setInspection(false);
+    setExploded(false);
+    setRotationPreview(null);
+    setTool("select");
+  }
   const [hovered, setHovered] = useState<string | null>(null);
   const selectedPart = model.instances.find((part) => part.id === selected);
   const inspectionPartId = inspection && selectedPart && !placement ? selectedPart.id : null;
   const editing = Boolean(placement) || tool === "move";
-  const elevationEditing = editing && (view === "front" || view === "right");
+  const workingAxis = props.workplane?.axis ?? "y";
+  const grazingView = (value: CameraView) =>
+    value !== "iso" &&
+    (value === "front" || value === "back"
+      ? workingAxis !== "z"
+      : value === "right" || value === "left"
+        ? workingAxis !== "x"
+        : workingAxis !== "y");
+  const elevationEditing = editing && grazingView(view);
   const effectiveView = elevationEditing ? "iso" : view;
   const fail = useCallback(() => {
     setFailed(true);
+    setReady(false);
+    setRotationPreview(null);
     setInspection(false);
-  }, []);
+    setExploded(false);
+    setExportRequest(null);
+    onCancelInteraction?.();
+  }, [onCancelInteraction]);
   const loaded = useCallback(() => setReady(true), []);
   const placementPart = partDefinitions.find((part) => part.id === placement?.partId);
   const placementColor = colors.find((color) => color.id === placement?.colorId);
   const feedback = placement ? placementFeedback(model, partDefinitions, placement) : null;
+  const editingLocked = Boolean(inspection || exploded || props.section || exportRequest);
+  useEffect(() => {
+    onEditingLockChange?.(editingLocked);
+  }, [editingLocked, onEditingLockChange]);
+  useEffect(() => {
+    const cancel = () => setRotationPreview(null);
+    const visibility = () => {
+      if (document.hidden) cancel();
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancel();
+    };
+    window.addEventListener("blur", cancel);
+    window.addEventListener("keydown", keydown);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("blur", cancel);
+      window.removeEventListener("keydown", keydown);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, []);
   if (placement && exploded) setExploded(false);
   if (inspection && (placement || !selectedPart)) {
     setInspection(false);
@@ -122,7 +253,7 @@ export function ModelViewport(props: ModelViewportProps) {
   }, []);
   const fallback = (
     <div className="absolute inset-0 flex flex-col">
-      <ModelPoster id={model.id} title={model.title} className="min-h-0 flex-1" />
+      <StaticPreview id={model.id} title={model.title} className="min-h-0 flex-1" />
       <div className="m-4 rounded-md border bg-surface p-3 text-sm">
         <p>
           WebGL is unavailable. This poster shows the baseline; current parts and edit controls
@@ -142,7 +273,53 @@ export function ModelViewport(props: ModelViewportProps) {
     </div>
   );
   return (
-    <section className="flex min-h-0 flex-1 flex-col" aria-label="Model viewport">
+    <section
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      aria-label="Model viewport"
+      data-testid="model-viewport"
+      data-scene-ready={active && ready && !failed}
+      onKeyDown={(event) => {
+        const target = event.target;
+        if (
+          target instanceof HTMLElement &&
+          (target.matches("input, textarea, select") || target.isContentEditable)
+        )
+          return;
+        if (event.key === "Escape") {
+          setRotationPreview(null);
+          onCancelPlacement?.();
+          setPickCandidates([]);
+          setSelectThrough(false);
+          setExportRequest(null);
+          setContextCommands(false);
+          return;
+        }
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+        if (event.key.toLowerCase() === "f") {
+          event.preventDefault();
+          setFitSelection(Boolean(selected));
+          setFitRequest((n) => n + 1);
+          setZoom(1);
+        }
+        if (event.key.toLowerCase() === "v") {
+          setRotationPreview(null);
+          onCancelPlacement?.();
+          setTool("select");
+        }
+        if (event.key.toLowerCase() === "g" && (!props.mode || props.mode === "build")) {
+          onCancelPlacement?.();
+          setTool("move");
+        }
+        if (
+          event.key.toLowerCase() === "r" &&
+          (!props.mode || props.mode === "build") &&
+          props.onRotate
+        ) {
+          onCancelPlacement?.();
+          setTool("rotate");
+        }
+      }}
+    >
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3 py-1">
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           <button
@@ -162,7 +339,11 @@ export function ModelViewport(props: ModelViewportProps) {
               className={`button min-h-9 px-2.5 text-xs ${tool === "move" && !placement ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
               aria-label="Move tool"
               aria-pressed={tool === "move" && !placement}
-              disabled={exploded}
+              disabled={
+                exploded ||
+                Boolean(props.section) ||
+                (props.mode !== undefined && props.mode !== "build")
+              }
               title={
                 exploded
                   ? "Close exploded view to move parts"
@@ -175,6 +356,25 @@ export function ModelViewport(props: ModelViewportProps) {
               }}
             >
               <Move size={15} /> Move
+            </button>
+          )}
+          {props.onRotate && (
+            <button
+              className={`button min-h-9 px-2.5 text-xs ${tool === "rotate" ? "bg-primary-muted text-primary" : "border-transparent"}`}
+              aria-label="Rotate tool"
+              aria-pressed={tool === "rotate"}
+              disabled={
+                exploded ||
+                Boolean(props.section) ||
+                (props.mode !== undefined && props.mode !== "build")
+              }
+              onClick={() => {
+                onCancelPlacement?.();
+                exitInspection();
+                setTool("rotate");
+              }}
+            >
+              <RotateCcw size={15} /> Rotate
             </button>
           )}
           <button
@@ -205,70 +405,296 @@ export function ModelViewport(props: ModelViewportProps) {
               setZoom(1);
             }}
           >
-            <ScanEye size={15} /> Inspect
+            <ScanEye size={15} />{" "}
+            <span className={props.compactControls ? "sr-only" : undefined}>Inspect</span>
           </button>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <button
-            className={`viewport-icon ${showGrid ? "bg-primary-muted text-primary" : ""}`}
-            aria-label="Show workspace grid"
-            aria-pressed={showGrid}
-            disabled={inspection}
-            title={
-              inspection ? "Exit brick inspection to show the workspace grid" : "Workspace grid"
+        <details open={!props.compactControls} className="min-w-0">
+          <summary
+            className={
+              props.compactControls ? "button min-h-10 cursor-pointer px-3 text-xs" : "hidden"
             }
-            onClick={() => setShowGrid((value) => !value)}
           >
-            <Grid2X2 size={17} />
-          </button>
-          {roofAvailable && (
+            View tools
+          </summary>
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
             <button
-              className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "roof" ? "bg-primary-muted text-primary" : "border-transparent"}`}
-              aria-label="Roof access"
-              disabled={failed}
-              aria-pressed={exploded && assemblyMode === "roof"}
-              title="Lift the complete roof to see inside"
-              onClick={() => openAssembly("roof")}
+              className={`viewport-icon ${showGrid ? "bg-primary-muted text-primary" : ""}`}
+              aria-label="Show workspace grid"
+              aria-pressed={showGrid}
+              disabled={inspection}
+              title={
+                inspection ? "Exit brick inspection to show the workspace grid" : "Workspace grid"
+              }
+              onClick={() => setShowGrid((value) => !value)}
             >
-              Roof access
+              <Grid2X2 size={17} />
             </button>
-          )}
-          <button
-            className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "modules" ? "bg-primary-muted text-primary" : "border-transparent"}`}
-            aria-label="Exploded view"
-            aria-pressed={exploded && assemblyMode === "modules"}
-            disabled={failed || !props.assemblyView || !model.instances.length}
-            title={
-              props.assemblyView
-                ? "Separate complete assembly modules along their guides"
-                : "No assembly modules are defined for this free-form model"
-            }
-            onClick={() => openAssembly("modules")}
-          >
-            <Layers3 size={15} /> Assembly
-          </button>
-          <label className="text-xs">
-            <span className="sr-only">Render quality</span>
+            {roofAvailable && (
+              <button
+                className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "roof" ? "bg-primary-muted text-primary" : "border-transparent"}`}
+                aria-label="Roof access"
+                disabled={failed}
+                aria-pressed={exploded && assemblyMode === "roof"}
+                title="Lift the complete roof to see inside"
+                onClick={() => openAssembly("roof")}
+              >
+                Roof access
+              </button>
+            )}
+            <button
+              className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "modules" ? "bg-primary-muted text-primary" : "border-transparent"}`}
+              aria-label="Exploded view"
+              aria-pressed={exploded && assemblyMode === "modules"}
+              disabled={failed || !props.assemblyView || !model.instances.length}
+              title={
+                props.assemblyView
+                  ? "Separate complete assembly modules along their guides"
+                  : "No assembly modules are defined for this free-form model"
+              }
+              onClick={() => openAssembly("modules")}
+            >
+              <Layers3 size={15} /> Assembly
+            </button>
+            <label className="text-xs">
+              <span className="sr-only">Render quality</span>
+              <select
+                className="rounded-sm border border-control-border bg-surface px-2 py-1.5"
+                value={quality}
+                onChange={(e) =>
+                  setQuality(
+                    e.target.value === "low"
+                      ? "low"
+                      : e.target.value === "standard"
+                        ? "standard"
+                        : "studio",
+                  )
+                }
+              >
+                <option value="studio">Quality</option>
+                <option value="standard">Auto · conservative</option>
+                <option value="low">Performance</option>
+              </select>
+            </label>
+          </div>
+        </details>
+      </div>
+      <details open={!props.compactControls} className="shrink-0 border-b bg-surface">
+        <summary
+          className={
+            props.compactControls
+              ? "min-h-10 cursor-pointer px-3 py-3 text-xs font-medium"
+              : "hidden"
+          }
+        >
+          Camera &amp; view options
+        </summary>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 bg-surface px-3 py-1.5 text-xs">
+          <label>
+            Projection{" "}
             <select
-              className="rounded-sm border border-control-border bg-surface px-2 py-1.5"
-              value={quality}
-              onChange={(e) =>
-                setQuality(
-                  e.target.value === "low"
-                    ? "low"
-                    : e.target.value === "standard"
-                      ? "standard"
-                      : "studio",
+              aria-label="Camera projection"
+              className="min-h-9 rounded border bg-surface px-2"
+              value={projection}
+              onChange={(event) =>
+                setProjection(event.target.value === "perspective" ? "perspective" : "orthographic")
+              }
+            >
+              <option value="orthographic">Orthographic</option>
+              <option value="perspective">Perspective</option>
+            </select>
+          </label>
+          <label>
+            Camera controls{" "}
+            <select
+              aria-label="Camera controls"
+              className="min-h-9 rounded border bg-surface px-2"
+              value={navigation}
+              onChange={(event) =>
+                setNavigation(
+                  event.target.value === "touch"
+                    ? "touch"
+                    : event.target.value === "trackpad"
+                      ? "trackpad"
+                      : "mouse",
                 )
               }
             >
-              <option value="studio">Studio quality</option>
-              <option value="standard">Balanced</option>
-              <option value="low">Performance</option>
+              <option value="mouse">Mouse</option>
+              <option value="trackpad">Trackpad · primary orbit</option>
+              <option value="touch">Touch navigation</option>
             </select>
           </label>
+          <details className="relative">
+            <summary className="button min-h-9 cursor-pointer px-2 text-xs">
+              Camera buttons & shortcuts
+            </summary>
+            <div className="absolute left-0 top-full z-20 w-64 max-w-[80vw] rounded border bg-surface p-3 shadow-md">
+              <div className="grid grid-cols-2 gap-1">
+                {(
+                  [
+                    "orbit-left",
+                    "orbit-right",
+                    "pan-left",
+                    "pan-right",
+                    "pan-up",
+                    "pan-down",
+                  ] as const
+                ).map((kind) => (
+                  <button
+                    key={kind}
+                    className="button min-h-10 px-2 text-xs"
+                    onClick={() =>
+                      setCameraAction((previous) => ({ serial: (previous?.serial ?? 0) + 1, kind }))
+                    }
+                  >
+                    {kind.replace("-", " ")}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 leading-5">
+                Right drag: orbit. Middle drag or Space + primary drag: pan. F: fit selection. V:
+                select. G: move. Escape: cancel. Shortcuts apply inside the viewport.
+              </p>
+            </div>
+          </details>
+          <button
+            className="button min-h-9 px-2 text-xs"
+            aria-pressed={selectThrough}
+            onClick={() => {
+              setSelectThrough((value) => !value);
+              setPickCandidates([]);
+            }}
+          >
+            Select through
+          </button>
+          {props.mode === "present" && (
+            <label>
+              Stage{" "}
+              <select
+                aria-label="Presentation preset"
+                className="min-h-9 rounded border bg-surface px-2"
+                value={presentationPreset}
+                onChange={(event) => {
+                  const value =
+                    event.target.value === "warm"
+                      ? "warm"
+                      : event.target.value === "transparent"
+                        ? "transparent"
+                        : "neutral";
+                  setPresentationPreset(value);
+                  setTransparentExport(value === "transparent");
+                }}
+              >
+                <option value="neutral">Neutral studio</option>
+                <option value="warm">Warm tabletop</option>
+                <option value="transparent">Transparent background</option>
+              </select>
+            </label>
+          )}
+          {props.mode === "present" && (
+            <details>
+              <summary className="button min-h-9 cursor-pointer px-2 text-xs">Export PNG</summary>
+              <div className="flex flex-wrap items-center gap-2 py-2">
+                <p>Complete assembled model · square framing · current camera · local download</p>
+                <select
+                  aria-label="PNG size"
+                  className="min-h-9 rounded border bg-surface px-2"
+                  value={exportSize}
+                  onChange={(event) => setExportSize(event.target.value === "2048" ? 2048 : 1024)}
+                >
+                  <option value="1024">1024 × 1024</option>
+                  <option value="2048">2048 × 2048</option>
+                </select>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={transparentExport}
+                    onChange={(event) => setTransparentExport(event.target.checked)}
+                  />{" "}
+                  Transparent background
+                </label>
+                <button
+                  className="button min-h-9 px-2 text-xs"
+                  disabled={!ready || failed || Boolean(exportRequest)}
+                  onClick={() => {
+                    setExportMessage("");
+                    setExportRequest({
+                      serial: Date.now(),
+                      size: exportSize,
+                      transparent: transparentExport,
+                    });
+                  }}
+                >
+                  Download PNG
+                </button>
+                {exportRequest && (
+                  <button
+                    className="button min-h-9 px-2 text-xs"
+                    onClick={() => {
+                      setExportRequest(null);
+                      setExportMessage("Image export cancelled. The model is unchanged.");
+                    }}
+                  >
+                    Cancel export
+                  </button>
+                )}
+                <span aria-live="polite">{exportMessage}</span>
+              </div>
+            </details>
+          )}
         </div>
-      </div>
+      </details>
+      {tool === "rotate" && (!props.mode || props.mode === "build") && (
+        <div className="flex flex-wrap items-center gap-2 border-b bg-primary-muted px-3 py-2 text-xs">
+          <span>Rigid rotation · Y axis · pivot: {selected ?? "select a part"}</span>
+          <button
+            className="button min-h-9 px-2 text-xs"
+            disabled={!selected}
+            onClick={() => previewRotation(-90)}
+          >
+            Preview −90°
+          </button>
+          <button
+            className="button min-h-9 px-2 text-xs"
+            disabled={!selected}
+            onClick={() => previewRotation(90)}
+          >
+            Preview +90°
+          </button>
+          <button
+            className="button min-h-9 px-2 text-xs"
+            disabled={!selected || !rotationPreview || !rotationCurrent}
+            onClick={() => {
+              if (
+                selected &&
+                rotationPreview &&
+                rotationCurrent &&
+                props.onRotate?.(selected, rotationPreview)
+              )
+                setRotationPreview(null);
+            }}
+          >
+            Apply rotation
+          </button>
+          <button
+            className="button min-h-9 px-2 text-xs"
+            onClick={() => {
+              setRotationPreview(null);
+              setTool("select");
+            }}
+          >
+            Cancel rotation
+          </button>
+          <span>
+            {rotationPreview
+              ? rotationCurrent
+                ? `${rotationPreview}° preview; canonical revision unchanged until Apply`
+                : "Selection or revision changed. Choose a new rotation preview."
+              : "Choose a quarter-turn preview"}
+          </span>
+        </div>
+      )}
       {exploded && (
         <div
           className="shrink-0 border-b bg-surface px-3 py-2"
@@ -291,6 +717,19 @@ export function ModelViewport(props: ModelViewportProps) {
                 className="w-24 accent-primary"
               />
               <span className="w-8 tabular-nums">{Math.round(assemblyAmount * 100)}%</span>
+              <input
+                type="number"
+                aria-label="Assembly separation percent"
+                min="0"
+                max="100"
+                value={Math.round(assemblyAmount * 100)}
+                className="min-h-9 w-16 rounded border bg-surface px-2"
+                onChange={(event) => {
+                  const value = Number(event.target.value);
+                  if (Number.isFinite(value))
+                    setAssemblyAmount(Math.max(0, Math.min(100, value)) / 100);
+                }}
+              />
             </label>
             <button
               className="text-xs font-medium text-primary"
@@ -318,11 +757,39 @@ export function ModelViewport(props: ModelViewportProps) {
         aria-label={`Interactive brick model: ${model.title}`}
         aria-describedby="canvas-help"
         className="relative min-h-[360px] flex-1 overflow-hidden bg-background sm:min-h-[430px] lg:min-h-0"
+        onPointerDownCapture={(event) => {
+          if (event.button === 2) {
+            secondaryGesture.current = { x: event.clientX, y: event.clientY, moved: false };
+            setContextCommands(false);
+          }
+        }}
+        onPointerMoveCapture={(event) => {
+          const gesture = secondaryGesture.current;
+          if (gesture && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 4)
+            gesture.moved = true;
+        }}
+        onPointerUpCapture={(event) => {
+          if (event.button !== 2) return;
+          const gesture = secondaryGesture.current;
+          secondaryGesture.current = null;
+          if (
+            gesture &&
+            !gesture.moved &&
+            Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) <= 4
+          )
+            setContextCommands(true);
+        }}
+        onPointerCancelCapture={() => {
+          secondaryGesture.current = null;
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+        }}
       >
         {failed ? (
           fallback
         ) : active ? (
-          <SceneBoundary key={reset} fallback={fallback}>
+          <SceneBoundary key={reset} fallback={fallback} onFailure={fail}>
             <Scene
               {...props}
               exploded={exploded}
@@ -332,10 +799,24 @@ export function ModelViewport(props: ModelViewportProps) {
               quality={quality}
               view={effectiveView}
               fitRequest={fitRequest}
-              showGrid={showGrid}
-              showDimensions={showDimensions}
+              showGrid={showGrid && props.mode !== "present" && !exportRequest}
+              showDimensions={showDimensions && props.mode !== "present" && !exportRequest}
               inspectionPartId={inspectionPartId}
               tool={placement ? "select" : tool}
+              projection={projection}
+              navigation={navigation}
+              cameraAction={cameraAction}
+              fitSelection={fitSelection}
+              selectThrough={selectThrough}
+              onPickCandidates={setPickCandidates}
+              exportRequest={exportRequest}
+              onExport={exportComplete}
+              presentationPreset={props.mode === "present" ? presentationPreset : "neutral"}
+              rotationPreview={
+                tool === "rotate" && rotationCurrent && (!props.mode || props.mode === "build")
+                  ? rotationPreview
+                  : null
+              }
               onFailure={fail}
               onReady={loaded}
               onHover={setHovered}
@@ -343,7 +824,7 @@ export function ModelViewport(props: ModelViewportProps) {
           </SceneBoundary>
         ) : (
           <>
-            <ModelPoster id={model.id} title={model.title} className="absolute inset-0" />
+            <StaticPreview id={model.id} title={model.title} className="absolute inset-0" />
             <div className="absolute inset-x-4 bottom-6 flex flex-col items-center gap-2">
               <Button variant="primary" onClick={() => setActive(true)}>
                 <Maximize2 size={17} />
@@ -364,6 +845,64 @@ export function ModelViewport(props: ModelViewportProps) {
             </p>
           </div>
         )}
+        {selectThrough && (
+          <div className="absolute left-3 top-16 z-10 max-h-56 max-w-[calc(100%-1.5rem)] overflow-auto rounded border bg-surface p-3 text-xs shadow-md">
+            <p className="mb-2">
+              Select through · click the model for visible surface candidates, nearest first.
+            </p>
+            {pickCandidates.map((id, index) => (
+              <button
+                key={id}
+                className="button mb-1 flex min-h-10 w-full justify-start px-2 text-xs"
+                onClick={() => {
+                  props.onSelect(id, props.multiSelect);
+                  setSelectThrough(false);
+                  setPickCandidates([]);
+                }}
+              >
+                {index + 1}. {id}
+              </button>
+            ))}
+            <button className="button min-h-9 px-2 text-xs" onClick={() => setSelectThrough(false)}>
+              Close select through
+            </button>
+          </div>
+        )}
+        <Dialog
+          open={contextCommands}
+          onOpenChange={setContextCommands}
+          title="Context commands"
+          description="Commands for the current selection. Secondary dragging orbits without opening these commands."
+        >
+          <div className="grid gap-2">
+            <button
+              className="button min-h-10 px-3 text-xs"
+              onClick={() => {
+                setFitSelection(Boolean(selected));
+                setFitRequest((n) => n + 1);
+                setZoom(1);
+                setContextCommands(false);
+              }}
+            >
+              Fit {selected ? "selection" : "model"}
+            </button>
+            <button
+              className="button min-h-10 px-3 text-xs"
+              onClick={() => {
+                setSelectThrough(true);
+                setContextCommands(false);
+              }}
+            >
+              Select through
+            </button>
+            <button
+              className="button min-h-10 px-3 text-xs"
+              onClick={() => setContextCommands(false)}
+            >
+              Close context commands
+            </button>
+          </div>
+        </Dialog>
         <div className="pointer-events-none absolute left-5 top-5 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
             {model.instances.length.toLocaleString("en")} pieces
@@ -445,6 +984,9 @@ export function ModelViewport(props: ModelViewportProps) {
                   ["front", "Front"],
                   ["top", "Top"],
                   ["right", "Right"],
+                  ["back", "Back"],
+                  ["left", "Left"],
+                  ["bottom", "Bottom"],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -452,7 +994,7 @@ export function ModelViewport(props: ModelViewportProps) {
                   className={`min-h-8 rounded-sm px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-45 ${effectiveView === value ? "bg-primary-muted font-medium text-primary" : "text-muted-foreground hover:bg-background"}`}
                   aria-label={`${label} view`}
                   aria-pressed={effectiveView === value}
-                  disabled={editing && (value === "front" || value === "right")}
+                  disabled={editing && grazingView(value)}
                   title={
                     editing && (value === "front" || value === "right")
                       ? placement
@@ -461,6 +1003,7 @@ export function ModelViewport(props: ModelViewportProps) {
                       : `${label} view`
                   }
                   onClick={() => {
+                    setFitSelection(false);
                     setView(value);
                     setFitRequest((n) => n + 1);
                     setZoom(1);
@@ -501,11 +1044,24 @@ export function ModelViewport(props: ModelViewportProps) {
                 aria-label="Fit model to view"
                 title="Fit model"
                 onClick={() => {
+                  setFitSelection(false);
                   setFitRequest((n) => n + 1);
                   setZoom(1);
                 }}
               >
                 <Scan size={17} />
+              </button>
+              <button
+                className="button min-h-9 px-2 text-xs"
+                aria-label="Fit selection"
+                disabled={!selected}
+                onClick={() => {
+                  setFitSelection(true);
+                  setFitRequest((n) => n + 1);
+                  setZoom(1);
+                }}
+              >
+                Focus
               </button>
               <button
                 className="viewport-icon"
@@ -540,7 +1096,11 @@ export function ModelViewport(props: ModelViewportProps) {
                   ? "Modules stay intact · dashed guides show their original positions"
                   : tool === "move"
                     ? "Drag a brick to move · ½-stud grid · Height in inspector"
-                    : "Drag to orbit · Scroll to zoom · Click a brick"
+                    : navigation === "touch"
+                      ? "One finger orbit · two fingers zoom/pan · tap selects"
+                      : navigation === "trackpad"
+                        ? "Primary drag orbit · right drag orbit · scroll zoom · click selects"
+                        : "Right drag orbit · middle drag pan · scroll zoom · click selects"
             : "Local model viewer"}
         </span>
         <span className="hidden 2xl:inline">

@@ -102,7 +102,7 @@ describe("Stud connector geometry and placement", () => {
       }).allowed,
     ).toBe(false);
   });
-  it("blocks an occupied socket even if the blocker is a custom detail", () => {
+  it("blocks strict placement with unknown coverage when a custom detail occupies a socket", () => {
     const blocked = {
       ...model,
       instances: [
@@ -118,7 +118,8 @@ describe("Stud connector geometry and placement", () => {
     };
     expect(placementFeedback(blocked, partDefinitions, pending)).toMatchObject({
       allowed: false,
-      message: "Space occupied · choose another position",
+      message:
+        "Nearby geometry is outside the supported overlap check. Choose Free position to make an unverified draft.",
     });
   });
   it("keeps free-form placement explicit and does not mutate the model", () => {

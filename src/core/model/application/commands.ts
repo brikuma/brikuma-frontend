@@ -1,4 +1,10 @@
 import { createModel, ensureEditable, failure } from "../domain/model";
+import { validatePlacement } from "../domain/placement";
+import {
+  applySelectionCommand,
+  isSelectionCommand,
+  type SelectionCommand,
+} from "./selection-commands";
 import type {
   EditCommand,
   EditingPolicy,
@@ -12,10 +18,22 @@ import type {
 } from "../domain/types";
 
 export function createSession(model: Model): ModelSession {
-  return { present: model, past: [], future: [], nextRevision: 1 };
+  const localRevision = model.revision.startsWith(`${model.id}-local-`)
+    ? Number(model.revision.slice(`${model.id}-local-`.length))
+    : 0;
+  return {
+    present: model,
+    past: [],
+    future: [],
+    nextRevision:
+      Number.isSafeInteger(localRevision + 1) && localRevision >= 0 ? localRevision + 1 : 1,
+  };
 }
 
-function updateInstances(model: Model, command: EditCommand): Result<readonly PartInstance[]> {
+function updateInstances(
+  model: Model,
+  command: Exclude<EditCommand, SelectionCommand | { type: "place" }>,
+): Result<readonly PartInstance[]> {
   if (command.type === "set-protection") return { ok: true, value: model.instances };
   if (command.type === "apply-variant") {
     if (model.revision !== command.variant.baseRevision) {
@@ -118,18 +136,55 @@ export function applyCommand(
   command: EditCommand,
   policy: EditingPolicy,
 ): Result<ModelSession> {
+  if (
+    !Number.isSafeInteger(session.nextRevision) ||
+    session.nextRevision < 1 ||
+    session.nextRevision >= Number.MAX_SAFE_INTEGER - 1
+  )
+    return failure("invalid-model", "The local revision counter is exhausted.");
   const model = session.present;
   let groups = model.groups;
+  let nextCommand = command;
+  if (command.type === "place") {
+    if (command.baseRevision !== model.revision)
+      return failure(
+        "revision-conflict",
+        "Placement belongs to an older revision. Recalculate it before placing.",
+      );
+    const definition = policy.parts.find((part) => part.id === command.instance.partId);
+    if (!definition) return failure("unknown-part", "Choose a supported demo part.");
+    const placement = validatePlacement(
+      model,
+      policy.parts,
+      definition,
+      command.instance.transform,
+      command.placement,
+    );
+    if (!placement.ok) return placement;
+    nextCommand = { type: "add", instance: command.instance };
+  }
   if (command.type === "set-protection") {
     const group = groups.find((candidate) => candidate.id === command.groupId);
     if (!group) return failure("unknown-group", "This subassembly does not belong to the model.");
+    if (group.parentId) {
+      const ancestor = ensureEditable(model, group.parentId);
+      if (!ancestor.ok) return ancestor;
+    }
     if (group.protected === command.protected)
       return failure("no-change", "This protection setting is already active.");
     groups = groups.map((candidate) =>
       candidate.id === command.groupId ? { ...candidate, protected: command.protected } : candidate,
     );
   }
-  const changed = updateInstances(model, command);
+  let changed: Result<readonly PartInstance[]>;
+  if (isSelectionCommand(nextCommand)) {
+    const outcome = applySelectionCommand(model, nextCommand, policy);
+    if (!outcome.ok) return outcome;
+    groups = outcome.value.groups;
+    changed = { ok: true, value: outcome.value.instances };
+  } else if (nextCommand.type !== "place") {
+    changed = updateInstances(model, nextCommand);
+  } else return failure("invalid-model", "Unsupported placement command.");
   if (!changed.ok) return changed;
   const geometryChanged = command.type !== "set-protection";
   const checked = createModel(
@@ -146,7 +201,7 @@ export function applyCommand(
     ok: true,
     value: {
       present: checked.value,
-      past: [...session.past, model].slice(-policy.historyLimit),
+      past: policy.historyLimit > 0 ? [...session.past, model].slice(-policy.historyLimit) : [],
       future: [],
       nextRevision: session.nextRevision + (geometryChanged ? 1 : 0),
     },

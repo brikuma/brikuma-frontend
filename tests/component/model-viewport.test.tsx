@@ -22,6 +22,8 @@ vi.mock("next/dynamic", () => ({
       assemblyMode,
       assemblyAmount,
       exploded,
+      projection,
+      rotationPreview,
     }: ModelViewportProps & {
       view: CameraView;
       tool: ViewportTool;
@@ -30,10 +32,14 @@ vi.mock("next/dynamic", () => ({
       assemblyMode: string;
       assemblyAmount: number;
       exploded: boolean;
+      projection: string;
+      rotationPreview: number | null;
     }) {
       return (
         <div>
           <div data-testid="scene-camera">{`${view} · ${tool}`}</div>
+          <div data-testid="scene-projection">{projection}</div>
+          <div data-testid="scene-rotation-preview">{rotationPreview ?? "No rotation preview"}</div>
           <div data-testid="scene-inspection">{inspectionPartId ?? "Complete model"}</div>
           <div data-testid="scene-model-count">{model.instances.length}</div>
           <div data-testid="scene-fit-request">{fitRequest}</div>
@@ -51,6 +57,145 @@ beforeEach(() => {
     vi.fn(() => 1),
   );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
+});
+
+describe("Specialist camera and rotation controls", () => {
+  it("EDT-036: compact controls collapse optional tools without removing the single renderer or essential tools", async () => {
+    const user = userEvent.setup();
+    const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
+    const { rerender } = render(<ModelViewport {...props} compactControls />);
+    expect(screen.getByText("Camera & view options").closest("details")).not.toHaveAttribute(
+      "open",
+    );
+    expect(screen.getByText("View tools").closest("details")).not.toHaveAttribute("open");
+    for (const label of ["Select tool", "Move tool", "Rotate tool"])
+      expect(screen.getByRole("button", { name: label })).toBeVisible();
+    await user.click(screen.getByText("Camera & view options"));
+    expect(screen.getByRole("combobox", { name: "Camera projection" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    expect(screen.getAllByTestId("scene-camera")).toHaveLength(1);
+    rerender(<ModelViewport {...props} compactControls={false} />);
+    expect(screen.getByRole("combobox", { name: "Render quality" })).toBeVisible();
+    expect(screen.getAllByTestId("scene-camera")).toHaveLength(1);
+  });
+  it("EDT-015/028: an early native contextmenu event cannot open a dialog during a secondary drag", () => {
+    render(<ModelViewport {...selectedViewportProps()} />);
+    const region = screen.getByRole("region", { name: "Interactive brick model: Untitled model" });
+    fireEvent(
+      region,
+      new MouseEvent("pointerdown", {
+        bubbles: true,
+        button: 2,
+        buttons: 2,
+        clientX: 10,
+        clientY: 10,
+      }),
+    );
+    fireEvent.contextMenu(region, { button: 2 });
+    expect(screen.queryByRole("dialog", { name: "Context commands" })).not.toBeInTheDocument();
+    fireEvent(
+      region,
+      new MouseEvent("pointermove", { bubbles: true, buttons: 2, clientX: 20, clientY: 10 }),
+    );
+    fireEvent(
+      region,
+      new MouseEvent("pointerup", { bubbles: true, button: 2, clientX: 20, clientY: 10 }),
+    );
+    expect(screen.queryByRole("dialog", { name: "Context commands" })).not.toBeInTheDocument();
+    fireEvent(
+      region,
+      new MouseEvent("pointerdown", {
+        bubbles: true,
+        button: 2,
+        buttons: 2,
+        clientX: 20,
+        clientY: 10,
+      }),
+    );
+    fireEvent.contextMenu(region, { button: 2 });
+    fireEvent(
+      region,
+      new MouseEvent("pointerup", { bubbles: true, button: 2, clientX: 20, clientY: 10 }),
+    );
+    expect(screen.getByRole("dialog", { name: "Context commands" })).toBeVisible();
+  });
+  it("EDT-027: projection preference is inherited on first mode entry and restored per mode", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const { rerender } = render(<ModelViewport {...props} mode="build" />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Camera projection" }),
+      "perspective",
+    );
+    rerender(<ModelViewport {...props} mode="present" />);
+    expect(screen.getByTestId("scene-projection")).toHaveTextContent("perspective");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Camera projection" }),
+      "orthographic",
+    );
+    rerender(<ModelViewport {...props} mode="build" />);
+    expect(screen.getByTestId("scene-projection")).toHaveTextContent("perspective");
+    rerender(<ModelViewport {...props} mode="present" />);
+    expect(screen.getByTestId("scene-projection")).toHaveTextContent("orthographic");
+    expect(props.onMove).not.toHaveBeenCalled();
+  });
+
+  it("EDT-021: quarter-turn preview commits once and rejects a stale revision", async () => {
+    const user = userEvent.setup();
+    const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
+    const { rerender } = render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+    await user.click(screen.getByRole("button", { name: "Preview +90°" }));
+    expect(screen.getByTestId("scene-rotation-preview")).toHaveTextContent("90");
+    expect(props.onRotate).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Apply rotation" }));
+    expect(props.onRotate).toHaveBeenCalledExactlyOnceWith("brick-1", 90);
+    await user.click(screen.getByRole("button", { name: "Preview −90°" }));
+    rerender(<ModelViewport {...props} model={{ ...props.model, revision: "changed-r2" }} />);
+    expect(screen.getByTestId("scene-rotation-preview")).toHaveTextContent("No rotation preview");
+    expect(screen.getByRole("button", { name: "Apply rotation" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(screen.getByText("Choose a quarter-turn preview")).toBeVisible();
+  });
+
+  it("EDT-026: an explicit assembled reset closes inspection even when Build was already active", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const lock = vi.fn();
+    const { rerender } = render(
+      <ModelViewport
+        {...props}
+        mode="build"
+        assembledResetRequest={0}
+        onEditingLockChange={lock}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
+    expect(screen.getByTestId("scene-inspection")).toHaveTextContent("brick-1");
+    rerender(
+      <ModelViewport
+        {...props}
+        mode="build"
+        assembledResetRequest={1}
+        onEditingLockChange={lock}
+      />,
+    );
+    expect(screen.getByTestId("scene-inspection")).toHaveTextContent("Complete model");
+    expect(lock).toHaveBeenLastCalledWith(false);
+  });
+
+  it("EDT-026: inspection editing lock is released on return to assembled view", async () => {
+    const user = userEvent.setup();
+    const lock = vi.fn();
+    render(<ModelViewport {...selectedViewportProps()} onEditingLockChange={lock} />);
+    expect(lock).toHaveBeenLastCalledWith(false);
+    await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
+    expect(lock).toHaveBeenLastCalledWith(true);
+    await user.click(screen.getByRole("button", { name: "Exit brick inspection" }));
+    expect(lock).toHaveBeenLastCalledWith(false);
+  });
 });
 
 function selectedViewportProps(): ModelViewportProps {

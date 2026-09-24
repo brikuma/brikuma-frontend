@@ -28,3 +28,26 @@ for (const path of [
     expect(results.violations).toEqual([]);
   });
 }
+
+test("EDT-034,036: active placement and mobile structure have no automated AA violations", async ({
+  page,
+}) => {
+  await page.goto("/editor/?project=blank");
+  await expect(page.locator('[data-scene-ready="true"]')).toBeVisible({ timeout: 20000 });
+  await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
+  const pending = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(pending.violations).toEqual([]);
+  await page.getByRole("button", { name: "Place brick", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Parts & structure", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Parts & structure", exact: true })
+    .getByRole("button", { name: "Structure", exact: true })
+    .click();
+  const structure = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(structure.violations).toEqual([]);
+});

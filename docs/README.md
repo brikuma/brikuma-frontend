@@ -16,6 +16,7 @@ Canonical frontend implementation knowledge. Shared product/repository policy re
 - Engineering: [architecture](engineering/ARCHITECTURE.md), [core](engineering/CORE.md), [patterns](engineering/PATTERNS.md), [dependencies](engineering/DEPENDENCIES.md), [fixtures](engineering/FIXTURES.md), [performance](engineering/PERFORMANCE.md), [quality](engineering/QUALITY.md)
 - Delivery: [plan](delivery/PLAN.md), [acceptance/evidence](delivery/ACCEPTANCE.md)
 - Agent workflow: [workflow](ai/WORKFLOW.md), [review](ai/REVIEW.md), [handoff](ai/HANDOFF.md)
+- [Editor workbench](editor/README.md), [editor execution evidence](editor/EVIDENCE.md)
 - [References and asset provenance](references/README.md)
 
 Repository entry points: [README](../README.md), [instructions](../AGENTS.md), [Claude adapter](../CLAUDE.md), [vocabulary](../LEGEND.md), [contributing](../CONTRIBUTING.md), [changes](../CHANGELOG.md), [security](../SECURITY.md), [third-party notices](../THIRD_PARTY_NOTICES.md).

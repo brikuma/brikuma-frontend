@@ -87,6 +87,7 @@ export function StudioEffects({
     [resources],
   );
   useFrame((state, delta) => {
+    if (document.hidden) return;
     const background = state.scene.background;
     try {
       if (resources) {

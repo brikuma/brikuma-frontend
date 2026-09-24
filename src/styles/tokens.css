@@ -48,3 +48,19 @@
   --radius-md: 0.375rem;
   --radius-lg: 0.625rem;
 }
+
+/* Editor-only art direction; existing product pages retain their canonical theme. */
+.workbench-shell {
+  --background: #f7f5f0;
+  --surface: #fffefb;
+  --surface-muted: #eeece5;
+  --foreground: #183237;
+  --muted-foreground: #53666b;
+  --primary: #14675f;
+  --primary-hover: #0d514c;
+  --primary-muted: #e4f0ec;
+  --selection: #0f8f88;
+  --accent: #a65f43;
+  --border: #dddad2;
+  --control-border: #82938f;
+}

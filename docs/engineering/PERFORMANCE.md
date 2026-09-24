@@ -1,16 +1,34 @@
 # FE-PERF-001 — Performance contract
 
-Owner: frontend. Status: local production gzip/Lighthouse targets measured and passed; field and GPU metrics not measured. Baseline: execution brief 1.1.0. Related: [dependencies](DEPENDENCIES.md), [quality](QUALITY.md), [acceptance](../delivery/ACCEPTANCE.md), [index](../README.md).
+Owner: frontend. Status: local production gzip/Lighthouse checkpoints and editor render-submission measurements recorded below; field metrics remain not measured. Baseline: execution brief 1.1.0 and editor specialist 1.0.0. Related: [dependencies](DEPENDENCIES.md), [quality](QUALITY.md), [acceptance](../delivery/ACCEPTANCE.md), [index](../README.md).
 
 Budgets: ordinary route initial JavaScript ≤250KiB gzip; editor shell ≤300KiB before WebGL; lazy 3D ≤900KiB; initial CSS ≤50KiB; initial selected-scene assets ≤2MiB; initial fonts ≤120KiB. System sans uses no downloaded font. Local SVG previews have fixed dimensions. Three/Fiber/Drei and scene arrays remain lazy at the workbench boundary; no dashboard card initializes WebGL. One active canvas, demand rendering and capped DPR are required.
 
 `npm run perf:check` checks gzip sizes derived from actual exported route script/style references and dynamic chunk imports, `npm run perf:lighthouse` separately runs three Lighthouse13.5 production measurements each of workspace and community with installed Chrome. Static output must exist and `npm run preview` must be running. Reports include browser/user-agent, Lighthouse configuration, metric values, environment and revision; median metrics are summarized under ignored `artifacts/lighthouse/`; gzip budgets are under `artifacts/performance/`. Performance ≥95 is a project target; metric evidence remains available if unmet. Production interaction/network/browser journeys provide separate responsiveness evidence.
 
-The targets LCP≤2.5s, INP≤200ms, CLS≤0.1 at field 75th percentile are not measured field compliance. Lighthouse TBT is not field INP. Shell LCP is not scene-ready. GPU fps and real-phone behavior remain not measured until an appropriate device/profile is recorded. No analytics/RUM service is connected.
+The targets LCP≤2.5s, INP≤200ms, CLS≤0.1 at field 75th percentile are not measured field compliance. Lighthouse TBT is not field INP. Shell LCP is not scene-ready. The editor checkpoint records renderer frame-counter intervals on one desktop profile, not GPU hardware timestamps or real-phone behavior. No analytics/RUM service is connected.
 
 Browser minimums: Next 16.3.6 documents Chrome/Edge 111+, Firefox 111+, Safari 16.4+. Tailwind 4's modern CSS floor includes Chrome 111+, Safari 16.4+, Firefox 128+. WebGL2 remains device-dependent. Product target is latest two stable Chrome/Edge/Firefox and currently supported Safari/iOS; actual tested versions belong in acceptance.
 
 Sources: [Web Vitals](https://web.dev/articles/vitals), [Fiber performance](https://r3f.docs.pmnd.rs/advanced/scaling-performance), [Tailwind compatibility](https://tailwindcss.com/docs/compatibility), [Next supported browsers](https://nextjs.org/docs/architecture/supported-browsers).
+
+## Editor specialist measurements — 2026-09-24
+
+At 13:03:41 UTC, `node scripts/editor-performance.mjs` completed with exit 0 against the production static export after the comparison-view reset correction, with no concurrent browser/test workload. Toolchain: pinned Node 22.23.2/npm 10.9.8. Profile: Chrome 153.0.8010.53 headless, Darwin 27.0.0 ARM64, Apple M2 CPU and ANGLE Metal Apple M2 renderer, 1440×900 CSS pixels, DPR 1, Auto conservative quality, reduced motion, loopback network and no CPU/network throttle. This measured the uncommitted candidate based on `8f8e9190b3ec8d6cf77db78e2aec11a4d39df4a4`, build `JX50FHqhYGX3BumJv2qHZ`. The report retains exported HTML and fixture source SHA-256 values; the Git diff hash alone does not include untracked source.
+
+The fresh browser context opened the empty scene: shell-ready took 146.8 ms measured by the driver; the first real frame and scene-ready marks occurred 550.0 and 552.8 ms after the page time origin. The first Add/Place operation took 178.8 ms after its invocation. Subsequent fixture switches used the warmed browser context; their timings include opening the local study dialog and selecting the fixture.
+
+| Fixture            | Parts / draw calls / triangles | Scene switch ready | Orbit interval median / p95 | Pan interval median / p95 | Input to next render submission p95 / samples |
+| ------------------ | ------------------------------ | ------------------ | --------------------------- | ------------------------- | --------------------------------------------- |
+| Courtyard study    | 213 / 13 / 327,600             | 215.0 ms           | 16.7 / 17.8 ms              | 16.7 / 17.1 ms            | 17.3 ms / 12                                  |
+| Stress seed 260924 | 1,000 / 6 / 640,016            | 164.2 ms           | 16.7 / 17.5 ms              | 16.7 / 17.6 ms            | 14.6 ms / 17                                  |
+| Stress seed 260924 | 5,000 / 6 / 3,200,016          | 235.1 ms           | 16.7 / 19.1 ms              | 16.6 / 18.2 ms            | 27.8 ms / 30                                  |
+
+Each fixture had 58 measured orbit intervals and 39 pan intervals. Camera orientation/target changed while canonical revision/count stayed unchanged. Thirty canvas clicks were attempted per fixture; only clicks followed by a render-counter update contributed latency samples. This is an input-to-render-submission proxy, not displayed-pixel latency or field INP. Median intervals were near 60 fps and p95 intervals below the 33.3 ms fallback target; a strict 16.67 ms ceiling was not uniformly met. These bounded synthetic workloads do not establish performance for arbitrary models or other devices.
+
+On one selected brick, drag-preview/cancel took 159.7 ms and preserved revision, identity, count, position and history; completed drag took 157.2 ms, moved the same instance and added exactly one transaction; one undo took 39.4 ms and restored the original state. These wall times include Playwright movement and DOM observations, not human task times. After settling, each fixture added zero frames during an 800 ms idle observation. Twenty alternating empty/courtyard resets retained stable geometry counts of 15/24 and six textures. This covers the observed renderer counters, not all JavaScript memory or listener ownership.
+
+Page errors, HTTP responses ≥400 and external requests were all zero. The attempted background-tab observation reported `document.hidden=false`; true hidden-tab behavior remains **not measured**, despite an unchanged frame count. Field CWV, actual screen presentation latency, GPU hardware timing, real touch devices and participant outcomes remain unmeasured. Raw evidence: `artifacts/editor-performance/report.json` and the three adjacent fixture PNGs, all visually inspected. The superseded 12:52:21 UTC report is retained as `report-before-comparison-fix.json` in the same directory. The [measurement runner](../../scripts/editor-performance.mjs) reproduces this bounded protocol; [editor evidence](../editor/EVIDENCE.md) records broader candidate checks and remaining gaps. Earlier measurements below describe their own historical outputs.
 
 ## Studio revision measurements — 2026-09-24
 

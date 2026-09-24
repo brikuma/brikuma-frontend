@@ -1,54 +1,30 @@
 # Frontend handoff
 
-ID: FE-AI-003
+ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, editor specialist brief 1.0.0.
 
-Owner/scope: frontend repository
+The current editor extends baseline `8f8e919` with a browser-local modeling kernel and workbench. Other product routes are preserved. The frontend remains an independent Git repository; no approved child remotes or root gitlinks exist. No push, remote creation, deployment, backend or infrastructure implementation is included.
 
-Status: Local and independent checkout tests passed; temporary ESLint maintenance exception approved; candidate review pending; integration blocked
+## Current behavior
 
-Baseline: execution brief 1.1.0 / consolidated product v0.0.3, 2026-09-24.
+- Empty-scene building, original samples, stable surface picking, multi-selection, explicit groups/protection, atomic rigid edits and bounded undo/redo.
+- Grid, Connect and Free previews share core validation. The declared rectangular subset has deterministic stud/receptacle candidates and render-independent occupied-volume checks. Custom geometry can remain not checked; physical stability and forces are not evaluated.
+- Build/Inspect/Present share one canonical model. Focus, hiding, sectioning, explosion, curated steps and camera state are presentation layers.
+- Real local experiments show exact impact and reject stale acceptance. Same-footprint replacement preserves instance identity and requires explicit acknowledgement for unknown compatibility.
+- References stay local in memory. Versioned project files and 1024/2048-square PNGs are actual downloads, with no automatic model persistence or cloud claim.
+- Original placement lab: 28 parts; courtyard study: 213; existing visual rover: 44. Deterministic 1,000/5,000-part stress fixtures are opt-in.
 
-## Current studio checkpoint — 2026-09-24
+The [requirement register](../editor/README.md) maps EDR-001–036 to implementation and acceptance IDs. [Evidence](../editor/EVIDENCE.md) is the authoritative run ledger, with measured performance, visual artifacts and browser limits. The [modeling](../editor/MODELING.md), [rendering](../editor/RENDERING.md) and [experience](../editor/EXPERIENCE.md) documents explain actual contracts.
 
-The owner requested substantial improvements to rendering, manual modeling and the whole site's visual design, followed by realistic brick proportions/connections and a contemporary professional workspace. All four shared image references and accessible Lego Builder project context were inspected; exact coverage is recorded in [references](../references/README.md). The unavailable-source statement in the historical checkpoint below describes the initial implementation only.
+## Verification and review
 
-The uncommitted frontend tree based on `ad95c84` implements the studio revision and [FE-DEC-011](../DECISIONS.md#fe-dec-011-contemporary-workspace-stud-feedback-and-authored-assemblies): neutral graphite/indigo UI, a 1,171-part courtyard, 1,136-part authored roof alternative, 44-part rover, 38-part creature and 67 catalog definitions. The retained Three/Fiber/Drei stack provides architectural geometry, open brick undersides, contact shadows, studio ambient occlusion, dimensions and single-canvas underside inspection. Authored roof access and adjustable module separation preserve logical transforms/history and make no verified build-order claim.
+Use the pinned existing Node 22.23.2 / npm 10.9.8 toolchain. No runtime dependencies changed. Production and complete npm advisory audits reported zero known vulnerabilities on this pass; the existing time-limited ESLint 9 maintenance exception remains in the [dependency register](../engineering/DEPENDENCIES.md). Existing architecture, hook and CI gates remain enabled.
 
-Manual editing supports color before placement, Snap to studs/Ground/Free modes, drag, numeric X/Z increments of 0.1 studs and Y increments of 0.05, rotation, duplication and reversible history. Stud feedback checks nominal connector coincidence and conservative occupied body bounds; decorative custom details default to Free placement. Core edit commands remain free-form within their invariants. This is not physical connection/strength certification or a general collision solver.
+Generated verification/review records in `artifacts/quality/` bind checks to the exact staged tree and lockfile. Source/build identities and command logs are listed in the evidence ledger. A separate reviewer found and verified fixes for gesture focus, assembled reset, revision exhaustion, export continuity and invisible selection outlines; real browser tests additionally caught background-click clearing and WebKit sheet focus.
 
-`npm run check` passed 265 unit/component tests in 16 files plus lint, format, full/core types, architecture, hook, documentation and license checks. Production export passed, and the recorded installed-Chrome browser suite passed all 30 tests in 40.8 seconds, including nominal stud placement, inspection, authored assembly controls, nine axe routes, fallback, quality switching and same-origin network checks. After final Structure count and screenshot timing/scroll corrections, the targeted responsive suite passed 8/8 in 15.3 seconds (`artifacts/studio-responsive-final.log`); the clean captures were inspected. The final rebuilt output passed gzip budgets at 2026-09-24T11:28:20.852Z; [current acceptance](../delivery/ACCEPTANCE.md#current-studio-revision-evidence--2026-09-24) and [performance](../engineering/PERFORMANCE.md#studio-revision-measurements--2026-09-24) identify their exact snapshot and limitations. Logs are `artifacts/studio-check.log`, `studio-build.log`, `studio-browser.log` and `studio-perf.log`; the integration record is `artifacts/studio-manifest.json`.
+## Remaining boundaries
 
-Actual toolchain: Node 22.23.3/npm 12.1.0 versus manifest pins 22.23.2/10.9.8. No dependency installation, new audit, Lighthouse run, real-device/GPU measurement, independent install, exact-staged-candidate review, commit or push is claimed for this redesign. Historical results below must not be attributed to this changed tree.
+EDR-029 is blocked by absent verified hinge geometry/pivot/axis/range metadata. No simulated mechanical validity is claimed. P2 remains deferred. Human participant count is zero; field performance, real iPad/touch/trackpad hardware and screen-reader behavior are not measured. Automated narrow layouts and WebKit are not device certification. Firefox launch availability and performance targets retain the actual statuses in evidence.
 
-## Initial implementation checkpoint (historical)
+The next smallest unresolved editor risk is real-device touch/trackpad gesture arbitration. Dense connector/diagnostic query costs need separate workloads beyond the measured rendering and selection baseline. General magnetic screen-space snapping, free-angle gizmos, adaptive quality and arbitrary CAD support remain outside the declared bounded contracts.
 
-The supplied execution brief and existing frontend generated instructions were read. Global policy is newly authored for the intended checkout and linked explicitly by the appended frontend reading map. The lead agent explicitly read root AGENTS, architecture, quality and documentation rules after creation; bundled Next static-export/lazy-loading/server-client/query docs were read before coding. No original Word documents or FORMA screenshot were available; the supplied ChatGPT share was unreviewed because it could not be fetched.
-
-All nine requested routes and the local editor/core/fixtures are implemented and tested locally. See [acceptance](../delivery/ACCEPTANCE.md) for actual command results and [traceability](../TRACEABILITY.md) for requirements; the ledger separates passed checks from remaining delivery prerequisites.
-
-## Known blockers and limits
-
-- Approved root/child remote URLs are unavailable. Reproducible submodule registration and pinned integration are blocked.
-- Project license, security contact and remote branch protections need owner decisions; none is fabricated or enabled by writing docs.
-- System sans is the selected font fallback; no font was downloaded.
-- Later user instruction requires npm with local-only installation; no system-global packages.
-- Actual Claude Code version/import execution, real iOS device behavior and field performance are not checked/measured.
-- Backend/infrastructure remain documentation-only.
-
-## Dependency and UI choices
-
-Use native form controls and one audited Radix Dialog foundation. No shadcn CLI/source copy has been used. See [local decisions](../DECISIONS.md).
-
-## Historical verified pre-commit checkpoint and next action
-
-The final production Chrome suite passed 26/26 in 26 seconds, including nine axe routes, fallback/context-loss, same-origin static GET/HEAD traffic and the inspected viewport matrix. The full frontend deterministic check passed 32 unit/component, 14 architecture and 8 hook cases plus lint/type/format/docs. Root check passed 18 documents, 10 documentation guards, the staged-evidence guards and one actual fresh-clone hook integration. The post-review evidence suite passed 7 cases, including the unstaged formatter-ignore regression.
-
-The subsequent exact-candidate frontend review added a committed-input guard to pre-push; the expanded nine-case hook/evidence suite passed. Both this frontend fix and the root formatter-ignore fix require fresh candidate records. The final execution response and global repository ledger record the resulting local commit identities; no commit can embed its own hash.
-
-The production static build and gzip check passed after the original cube icon and scaffold-asset cleanup; a prior timed build took 2.7 seconds. Final gzip measurements: workspace JS 187.0 KiB, editor shell 210.4 KiB, CSS 7.1 KiB; all remaining lazy chunks total 359.2 KiB as a conservative upper bound. Three desktop Lighthouse runs each for workspace/community yielded median Performance 98, Accessibility 100, Best Practices 100; LCP 1.157/1.107 seconds, CLS 0, TBT 0.
-
-Independent archived candidate `7e09961` passed offline `npm ci`, core typecheck, 18 core tests and static build without parent dependencies; logs are in `artifacts/standalone/`. Its install exposed an ESLint 9.39.5 unsupported/deprecation warning. The owner approved a temporary development-only exception on 2026-09-24, to be reassessed by 2026-10-24 or the next stable Next.js lint configuration release, whichever is earlier; see the canonical [dependency decision](../engineering/DEPENDENCIES.md). Next: review the final exact staged trees with fresh evidence, then make authorized coherent root/frontend commits. Full integration remains blocked by approved remote URLs. No root/frontend commit or portable integration is claimed yet. Never treat generated scripts/workflows as executed evidence.
-
-Related: [plan](../delivery/PLAN.md), [decisions](../DECISIONS.md), [global repositories](../../../docs/REPOSITORIES.md).
-
-Documentation-only child commits are backend `51e73cd` and infrastructure `1b8c92b`, both clean `main` at the recorded checkpoint; full runtime hooks are deferred there. Root/FE exact-tree commits and registered integration pins are still pending. Native 200%/400% browser zoom, Firefox/WebKit, real mobile devices, field metrics and GPU frame rates remain unverified/unmeasured. See [repository checkpoint](../../../docs/REPOSITORIES.md#2026-09-24-local-bootstrap-checkpoint).
+Launch from this repository with `npm run dev -- --port 3000`, then open `/editor/?project=blank`. Production verification uses `npm run build` and `npm run preview` at port 4173. Explicitly download a project file to retain edits across reloads.

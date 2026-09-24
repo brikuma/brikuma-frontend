@@ -93,7 +93,7 @@
     @apply rounded-md border border-border bg-background p-3 text-sm text-muted-foreground;
   }
   .workbench-grid {
-    @apply grid min-h-[560px] min-w-0 flex-1 grid-cols-1 lg:grid-cols-[232px_minmax(0,1fr)] xl:grid-cols-[232px_minmax(0,1fr)_256px] 2xl:grid-cols-[248px_minmax(0,1fr)_272px];
+    @apply grid min-h-[560px] min-w-0 flex-1 grid-cols-1;
   }
   .workbench-shell {
     @apply flex min-w-0 flex-col;
@@ -145,16 +145,25 @@
   }
 }
 @media (min-width: 1024px) {
+  .workbench-grid {
+    grid-template-columns: var(--editor-left-width, 256px) minmax(0, 1fr);
+  }
   .workbench-grid[data-left-collapsed="true"] {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (min-width: 1280px) {
+  .workbench-grid {
+    grid-template-columns: var(--editor-left-width, 256px) minmax(0, 1fr) var(
+        --editor-right-width,
+        280px
+      );
+  }
   .workbench-grid[data-left-collapsed="true"] {
-    grid-template-columns: minmax(0, 1fr) 256px;
+    grid-template-columns: minmax(0, 1fr) var(--editor-right-width, 280px);
   }
   .workbench-grid[data-right-collapsed="true"] {
-    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-columns: var(--editor-left-width, 256px) minmax(0, 1fr);
   }
   .workbench-grid[data-left-collapsed="true"][data-right-collapsed="true"] {
     grid-template-columns: minmax(0, 1fr);
@@ -162,10 +171,10 @@
 }
 @media (min-width: 1536px) {
   .workbench-grid[data-left-collapsed="true"] {
-    grid-template-columns: minmax(0, 1fr) 272px;
+    grid-template-columns: minmax(0, 1fr) var(--editor-right-width, 296px);
   }
   .workbench-grid[data-right-collapsed="true"] {
-    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-columns: var(--editor-left-width, 272px) minmax(0, 1fr);
   }
   .workbench-grid[data-left-collapsed="true"][data-right-collapsed="true"] {
     grid-template-columns: minmax(0, 1fr);
@@ -218,5 +227,28 @@
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
+  }
+}
+
+.workbench-shell .button,
+.workbench-shell .icon-button,
+.workbench-shell .viewport-icon {
+  min-height: 2.5rem;
+}
+.workbench-shell .viewport-icon {
+  min-width: 2.5rem;
+}
+.workbench-shell {
+  color: var(--foreground);
+  background: var(--background);
+}
+@media (pointer: coarse) {
+  .workbench-shell button {
+    min-height: 2.75rem;
+  }
+}
+@media (max-height: 739px) {
+  .workbench-grid {
+    min-height: 35rem;
   }
 }

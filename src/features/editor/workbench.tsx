@@ -1,5 +1,13 @@
 "use client";
-import { useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import {
   Undo2,
@@ -7,303 +15,377 @@ import {
   PanelLeft,
   PanelRight,
   RotateCcw,
-  Download,
   Info,
-  CircleDashed,
   Plus,
-  X,
-  RotateCw,
   Maximize2,
+  FolderOpen,
+  Keyboard,
 } from "lucide-react";
 import { useProject } from "./state/session";
 import { PartCatalog } from "./components/part-catalog";
 import { Structure } from "./components/structure";
 import { SelectionInspector } from "./components/selection-inspector";
+import { SelectionTools } from "./components/selection-tools";
+import { PlacementControls } from "./components/placement-controls";
 import { ModelViewport } from "./components/model-viewport";
-import { AssistantPreview } from "@/features/ai-preview/assistant-preview";
+import {
+  EditorFiles,
+  EditorReferences,
+  useEditorReferences,
+  EditorExperiment,
+  EditorStepPreview,
+  EditorReplacement,
+} from "./components/editor-workflows";
 import { ProjectNavigation } from "@/components/shell/project-navigation";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { partDefinitions, editPolicy, colors } from "@/fixtures/catalog";
-import { getPartConnections, type GridTransform, type QuarterTurn } from "@/core/model/public";
-import { PartPreview } from "./components/part-preview";
-import { PartDimensions } from "./components/part-dimensions";
+import { partDefinitions, editPolicy } from "@/fixtures/catalog";
+import {
+  diagnoseModel,
+  snapGridTransform,
+  getGroupInstanceIds,
+  isGroupProtected,
+  type EditCommand,
+  type GridTransform,
+  type Model,
+  type QuarterTurn,
+} from "@/core/model/public";
 import type { PlacementPreview } from "./viewport-types";
 import { snapPlacementCenter } from "./placement-grid";
-import { placementFeedback } from "./placement-feedback";
+import type { SceneFixture } from "@/fixtures/scene-types";
+import type { EditorFixtureId } from "@/fixtures/editor";
 
-type Placement = PlacementPreview;
+const subscribeWidth = (notify: () => void) => {
+  window.addEventListener("resize", notify);
+  return () => window.removeEventListener("resize", notify);
+};
+const readWidth = () => window.innerWidth;
+const serverWidth = () => 0;
 
-function PlacementFields({
-  placement,
-  onChange,
-  onPlace,
-  onCancel,
-  onColorChange,
-  onTargetChange,
-}: {
-  placement: Placement;
-  onChange: (transform: GridTransform) => void;
-  onPlace: (transform: GridTransform) => boolean;
-  onCancel: () => void;
-  onColorChange: (colorId: string) => void;
-  onTargetChange: (target: "surface" | "ground" | "free") => void;
-}) {
-  const [position, setPosition] = useState({
-    x: String(placement.transform.x),
-    y: String(placement.transform.y),
-    z: String(placement.transform.z),
-  });
-  const definition = partDefinitions.find((part) => part.id === placement.partId);
+type TaskMode = "build" | "inspect" | "present";
+
+function Checks({ model, onFocus }: { model: Model; onFocus: (ids: readonly string[]) => void }) {
+  const [result, setResult] = useState<ReturnType<typeof diagnoseModel> | null>(null);
   return (
-    <section
-      className="rounded-lg border border-primary/30 bg-primary-muted/30 p-3"
-      aria-label="Pending brick placement"
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-primary">Place {definition?.name}</p>
-        <button
-          aria-label="Cancel placement"
-          className="flex size-7 items-center justify-center rounded-sm hover:bg-surface"
-          onClick={onCancel}
-        >
-          <X size={14} />
-        </button>
-      </div>
-      {definition && (
-        <div className="mb-3 flex items-center gap-2">
-          <div className="h-10 w-12 shrink-0">
-            <PartPreview
-              part={definition}
-              color={colors.find((color) => color.id === placement.colorId)?.hex ?? colors[0].hex}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <PartDimensions
-              part={definition}
-              rotation={placement.transform.rotation}
-              label="Placement dimensions"
-            />
-          </div>
-        </div>
-      )}
-      <label className="mb-2 flex items-center gap-2 text-xs font-medium">
-        Color
-        <select
-          aria-label="Pending brick color"
-          className="field min-h-9 flex-1 py-1 text-xs"
-          value={placement.colorId}
-          onChange={(event) => onColorChange(event.target.value)}
-        >
-          {colors.map((color) => (
-            <option key={color.id} value={color.id}>
-              {color.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <fieldset className="mb-3 min-w-0">
-        <legend className="sr-only">Placement surface</legend>
-        <div className="grid grid-cols-3 gap-1 rounded-md bg-surface/70 p-1">
-          {(
-            [
-              ["surface", "Snap to studs"],
-              ["free", "Free"],
-              ["ground", "Ground plane"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              title={
-                value === "ground"
-                  ? "Use the ground grid even when pointing at another part"
-                  : value === "free"
-                    ? "Place freely without matching connectors"
-                    : "Align the underside sockets to matching top studs"
-              }
-              onClick={() => onTargetChange(value)}
-              aria-pressed={(placement.target ?? "surface") === value}
-              className={`min-h-8 rounded-sm px-1 text-xs ${(placement.target ?? "surface") === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-surface-muted"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </fieldset>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onPlace({
-            ...placement.transform,
-            x: Number(position.x),
-            y: Number(position.y),
-            z: Number(position.z),
-          });
-        }}
-      >
-        <p className="mb-1.5 text-xs text-muted-foreground">Center position · studs</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(["x", "y", "z"] as const).map((axis) => (
-            <label key={axis} className="text-xs uppercase text-muted-foreground">
-              {axis}
-              <input
-                aria-label={`Placement ${axis.toUpperCase()}`}
-                required
-                type="number"
-                min={axis === "y" ? 0 : -editPolicy.bounds}
-                max={editPolicy.bounds}
-                step={axis === "y" ? 0.05 : 0.1}
-                value={position[axis]}
-                className="field mt-1 min-h-9 px-2 py-1 font-mono text-xs"
-                onChange={(event) => setPosition({ ...position, [axis]: event.target.value })}
-              />
-            </label>
-          ))}
-        </div>
-        <div className="mt-2 flex gap-2">
-          <Button type="submit" variant="primary" className="flex-1 px-2">
-            <Plus size={14} />
-            Place brick
-          </Button>
-          <button
-            type="button"
-            className="button px-3"
-            aria-label="Rotate pending brick"
-            title="Rotate 90°"
-            onClick={() =>
-              onChange({
-                ...placement.transform,
-                rotation: ((placement.transform.rotation + 90) % 360) as QuarterTurn,
-              })
-            }
-          >
-            <RotateCw size={16} />
-          </button>
-        </div>
-      </form>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {placement.transform.rotation}° · Escape cancels
+    <section className="space-y-3" aria-label="Geometric diagnostics">
+      <h2 className="text-base">Geometric diagnostics</h2>
+      <p className="text-xs text-muted-foreground">
+        Hidden pieces participate. Rendering quality never changes these checks.
       </p>
+      <Button onClick={() => setResult(diagnoseModel(model, partDefinitions))}>
+        {result ? "Recalculate checks" : "Run supported checks"}
+      </Button>
+      {result && (
+        <>
+          <p className="text-xs">
+            {result.modelRevision === model.revision ? "Current" : "Stale: model revision changed"}{" "}
+            · {result.modelRevision}
+          </p>
+          <p className="text-sm">{result.conflicts.length} supported occupied-volume conflicts</p>
+          <p className="text-xs">
+            {result.checkedInstanceCount} supported pieces · {result.uncheckedIds.length} not
+            checked
+          </p>
+          <p className="text-xs text-muted-foreground">Rule {result.rule}</p>
+          <ul className="space-y-2">
+            {result.conflicts.slice(0, 30).map((conflict, index) => (
+              <li key={index}>
+                <button
+                  className="button w-full break-all text-left text-xs"
+                  onClick={() => onFocus(conflict.ids)}
+                >
+                  Reveal {conflict.ids.join(" / ")}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {result.conflicts.length > 30 && <p className="text-xs">First 30 conflicts shown.</p>}
+        </>
+      )}
+      <div className="border-t pt-3 text-xs text-muted-foreground">
+        <p>
+          Coverage: bounded basic rectangular brick/plate occupied volumes and known stud mating.
+          Custom shapes and arbitrary cavity relationships are not fully checked.
+        </p>
+        <p className="mt-2">
+          Physical stability, clutch force, load and build order: not evaluated.
+        </p>
+      </div>
     </section>
   );
 }
 
 export function Workbench() {
   const project = useProject();
-  const { model, entry, id, command, history, reset, message } = project;
-  const [resetOpen, setResetOpen] = useState(false);
-  const [tab, setTab] = useState("Structure");
+  return project.model && project.entry ? (
+    <EditorWorkbench key={project.id} project={project} />
+  ) : (
+    <div className="page-wrap" role="status">
+      {project.loadError || "Opening your local workspace…"}
+    </div>
+  );
+}
+function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }) {
+  const referenceState = useEditorReferences();
+  const width = useSyncExternalStore(subscribeWidth, readWidth, serverWidth);
+  const { model: loadedModel, entry: loadedEntry, message, history, reset } = project;
+  const model = loadedModel!;
+  const entry = loadedEntry!;
+  const [panelWidths, setPanelWidths] = useState({ left: 256, right: 280 });
+  const [stepViewRequest, setStepViewRequest] = useState({ serial: 0, view: "iso" as const });
+  const [assembledResetRequest, setAssembledResetRequest] = useState(0);
+  const [viewLocked, setViewLocked] = useState(false);
+  const [impactIds, setImpactIds] = useState<readonly string[]>([]);
+  const [mode, setMode] = useState<TaskMode>("build");
+  const [tab, setTab] = useState("Parts");
   const [inspector, setInspector] = useState("Selection");
-  const [selected, setSelected] = useState<string | null>(null);
-  const [hidden, setHidden] = useState<string[]>([]);
-  const [leftOpen, setLeftOpen] = useState(false);
-  const [rightOpen, setRightOpen] = useState(false);
+  const [selected, setSelected] = useState<readonly string[]>(() =>
+    project.focus === "roof"
+      ? [model.instances.find((part) => part.groupId === "roof")?.id ?? ""]
+      : [],
+  );
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [groupMode, setGroupMode] = useState(false);
+  const [scope, setScope] = useState<string | null>(null);
+  const [multiSelect, setMultiSelect] = useState(false);
+  const [hidden, setHidden] = useState<readonly string[]>([]);
+  const [focusIds, setFocusIds] = useState<readonly string[] | null>(null);
+  const [sheet, setSheet] = useState<"left" | "right" | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [pending, setPending] = useState<(Placement & { projectId: string }) | null>(null);
+  const [pending, setPending] = useState<PlacementPreview | null>(null);
+  const [repeat, setRepeat] = useState(false);
   const [catalogColor, setCatalogColor] = useState("limestone");
-  const [note, setNote] = useState("");
-  const [placementError, setPlacementError] = useState("");
-  const placement = pending?.projectId === id ? pending : null;
-  if (!model || !entry)
-    return (
-      <div className="page-wrap" role="status">
-        {project.loadError || "Opening your local workspace…"}
-      </div>
-    );
-  const selection = model.instances.some((part) => part.id === selected)
-    ? selected
-    : project.focus === "roof"
-      ? (model.instances.find((part) => part.groupId === "roof")?.id ?? null)
-      : null;
-  function select(partId: string) {
-    setSelected(partId);
+  const [notice, setNotice] = useState("");
+  const [resetOpen, setResetOpen] = useState(false);
+  const [fileOpen, setFileOpen] = useState(false);
+  const [hint, setHint] = useState(true);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [proposal, setProposal] = useState<Model | null>(null);
+  const [stepEpoch, setStepEpoch] = useState(0);
+  const [steps, setSteps] = useState<{
+    visibleIds: readonly string[];
+    mutedIds: readonly string[];
+  } | null>(null);
+  const [workplane, setWorkplane] = useState<{ axis: "x" | "y" | "z"; offset: number }>({
+    axis: "y",
+    offset: 0,
+  });
+  const [section, setSection] = useState<{ axis: "x" | "y" | "z"; offset: number } | null>(null);
+  const validScope = model.groups.some((group) => group.id === scope) ? scope : null;
+  const validSelectedGroup = model.groups.some((group) => group.id === selectedGroup)
+    ? selectedGroup
+    : null;
+  const selectionIds = selected.filter((partId) =>
+    model.instances.some((part) => part.id === partId),
+  );
+  const selection = selectionIds.at(-1) ?? null;
+  const hiddenIds = useMemo(() => {
+    const excluded = new Set(hidden);
+    for (const group of model.groups)
+      if (excluded.has(group.id))
+        for (const partId of getGroupInstanceIds(model, group.id)) excluded.add(partId);
+    return model.instances.filter((part) => excluded.has(part.id)).map((part) => part.id);
+  }, [model, hidden]);
+  const previewModel = useCallback((value: Model | null) => {
+    setProposal(value);
+    if (value) {
+      setMode("build");
+      setPending(null);
+    }
+  }, []);
+  const changeStepView = useCallback(
+    (view: { visibleIds: readonly string[]; mutedIds: readonly string[] } | null) => {
+      setSteps(view);
+      if (view) {
+        setMode("inspect");
+        setPending(null);
+      }
+    },
+    [],
+  );
+  const transient = pending ? "placing" : proposal ? "experiment" : steps ? "steps" : "idle";
+  const readOnly =
+    viewLocked || mode !== "build" || Boolean(proposal) || Boolean(steps) || Boolean(section);
+  useEffect(() => {
+    const cancel = () => setPending(null);
+    const visibility = () => {
+      if (document.hidden) cancel();
+    };
+    window.addEventListener("blur", cancel);
+    document.addEventListener("visibilitychange", visibility);
+    return () => {
+      window.removeEventListener("blur", cancel);
+      document.removeEventListener("visibilitychange", visibility);
+    };
+  }, []);
+  function command(value: EditCommand) {
+    if (readOnly) {
+      setNotice("Return to assembled Build to edit the model.");
+      return false;
+    }
+    setNotice("");
+    return project.command(value);
+  }
+  function select(partId: string, additive = false) {
+    if (!partId) {
+      setSelected([]);
+      setSelectedGroup(null);
+      return;
+    }
+    const part = model.instances.find((part) => part.id === partId);
+    if (!part) return;
+    if (validScope && !getGroupInstanceIds(model, validScope).includes(partId)) {
+      setNotice("Outside the active assembly. Exit group to select this part.");
+      return;
+    }
+    if (groupMode && !validScope) {
+      setSelected(getGroupInstanceIds(model, part.groupId));
+      setSelectedGroup(part.groupId);
+    } else {
+      setSelected((current) =>
+        additive || multiSelect
+          ? current.includes(partId)
+            ? current.filter((id) => id !== partId)
+            : [...current, partId]
+          : [partId],
+      );
+      setSelectedGroup(null);
+    }
     setInspector("Selection");
-    const groupId = model?.instances.find((part) => part.id === partId)?.groupId;
-    if (groupId) setHidden((groups) => groups.filter((group) => group !== groupId));
   }
   function cancelPlacement() {
     setPending(null);
-    setPlacementError("");
+    setNotice("Placement cancelled; model unchanged.");
+  }
+  function changePlacement(transform: GridTransform) {
+    setPending((current) => (current ? { ...current, transform } : null));
+    setNotice("");
   }
   function choosePart(partId: string, colorId: string) {
-    setPlacementError("");
+    if (readOnly) {
+      setNotice("Return to assembled Build before choosing a part.");
+      return;
+    }
     const definition = partDefinitions.find((part) => part.id === partId);
     if (!definition) return;
+    setNotice("");
+    setTab("Parts");
     setPending({
-      projectId: id,
       partId,
       colorId,
-      target: getPartConnections(definition).receivesStuds ? "surface" : "free",
+      target: "ground",
       transform: {
-        ...snapPlacementCenter({ x: 0, z: model?.id === "blank" ? 0 : 16 }, definition, 0),
+        ...snapPlacementCenter({ x: 0, z: 0 }, definition, 0),
         y: definition.height / 2,
         rotation: 0,
       },
     });
-    setTab("Parts");
+  }
+  function allocateId() {
+    let next = entry.session.nextRevision;
+    const used = new Set(model.instances.map((part) => part.id));
+    while (used.has(`added-${next}`)) next++;
+    return `added-${next}`;
+  }
+  function historyEdit(direction: "undo" | "redo") {
+    if (readOnly) {
+      setNotice("Return to assembled Build before changing history.");
+      return;
+    }
+    setPending(null);
+    history(direction);
   }
   function place(transform: GridTransform) {
-    if (!model || !entry || !placement) return false;
-    const feedback = placementFeedback(model, partDefinitions, { ...placement, transform });
-    if (!feedback.allowed) {
-      setPlacementError(feedback.message);
+    if (!pending) return false;
+    const group =
+      model.groups.find((group) => group.id === validScope) ??
+      model.groups.find((group) => !isGroupProtected(model, group.id)) ??
+      model.groups[0];
+    if (!group) {
+      setNotice("Create an editable assembly first.");
       return false;
     }
-    setPlacementError("");
-    const instanceId = `added-${entry.session.nextRevision}`;
-    const selectedGroup = model.groups.find(
-      (group) =>
-        group.id === model.instances.find((part) => part.id === selection)?.groupId &&
-        !group.protected,
-    );
-    const group =
-      selectedGroup ?? model.groups.find((group) => !group.protected) ?? model.groups[0];
+    const instanceId = allocateId();
     const ok = command({
-      type: "add",
+      type: "place",
       instance: {
         id: instanceId,
-        partId: placement.partId,
-        colorId: placement.colorId,
+        partId: pending.partId,
+        colorId: pending.colorId,
         groupId: group.id,
         transform,
       },
+      placement:
+        pending.target === "surface" ? "connect" : pending.target === "free" ? "free" : "grid",
+      baseRevision: model.revision,
     });
     if (ok) {
-      cancelPlacement();
-      setHidden((groups) => groups.filter((groupId) => groupId !== group.id));
-      select(instanceId);
-      setLeftOpen(false);
+      setHidden((current) => current.filter((value) => value !== group.id));
+      setSelected([instanceId]);
+      setSelectedGroup(null);
+      setInspector("Selection");
+      setNotice("Part placed. Undo restores the previous model.");
+      if (!repeat) {
+        setPending(null);
+        setSheet(null);
+      }
     }
     return ok;
   }
   function duplicate(partId: string) {
-    if (!model || !entry) return;
     const part = model.instances.find((item) => item.id === partId);
     if (!part) return;
-    const definition = partDefinitions.find((item) => item.id === part.partId);
-    const offset =
-      part.transform.rotation % 180 === 0 ? (definition?.width ?? 1) : (definition?.depth ?? 1);
-    const newId = `added-${entry.session.nextRevision}`;
-    const ok = command({
-      type: "duplicate",
-      id: partId,
-      newId,
-      transform: { ...part.transform, x: part.transform.x + Math.ceil(offset * 2) / 2 },
-    });
-    if (ok) {
-      setHidden((groups) => groups.filter((groupId) => groupId !== part.groupId));
-      select(newId);
+    const definition = partDefinitions.find((item) => item.id === part.partId)!;
+    const newId = allocateId();
+    const offset = part.transform.rotation % 180 === 0 ? definition.width : definition.depth;
+    if (
+      command({
+        type: "duplicate",
+        id: partId,
+        newId,
+        transform: { ...part.transform, x: part.transform.x + Math.ceil(offset * 2) / 2 },
+      })
+    ) {
+      setSelected([newId]);
+      setSelectedGroup(null);
+      setHidden((current) => current.filter((value) => value !== part.groupId));
     }
   }
-  function changePlacement(transform: GridTransform) {
-    setPlacementError("");
-    setPending((current) => (current ? { ...current, transform } : null));
+  function clearPresentation() {
+    setStepEpoch((value) => value + 1);
+    setFocusIds(null);
+    setSection(null);
+    setSteps(null);
+    setProposal(null);
+    setImpactIds([]);
   }
-  function changeCatalogColor(colorId: string) {
-    setCatalogColor(colorId);
-    setPending((current) => (current ? { ...current, colorId } : null));
+  function changeMode(value: TaskMode) {
+    if (value === "present" && proposal) {
+      setNotice(
+        "Choose Current or discard the local experiment before presenting the canonical model.",
+      );
+      return;
+    }
+    if (value === "build") setAssembledResetRequest((value) => value + 1);
+    setMode(value);
+    setPending(null);
+    if (value === "build") clearPresentation();
+  }
+  function focus(parts: readonly string[]) {
+    setFocusIds(parts);
+    setMode("inspect");
+    setPending(null);
+  }
+  function opened(fixture: SceneFixture) {
+    project.replaceFixture(fixture);
+    setSelected([]);
+    setHidden(fixture.initiallyHiddenIds ?? []);
+    setScope(null);
+    setSelectedGroup(null);
+    clearPresentation();
+    setPending(null);
+    setFileOpen(false);
   }
   function shortcut(event: KeyboardEvent) {
     if (
@@ -311,7 +393,8 @@ export function Workbench() {
       (event.target instanceof HTMLElement && event.target.closest('[role="dialog"]'))
     )
       return;
-    if (event.key === "Escape" && placement) {
+    if (event.key === "Escape" && pending) {
+      event.preventDefault();
       cancelPlacement();
       return;
     }
@@ -323,32 +406,33 @@ export function Workbench() {
     const key = event.key.toLowerCase();
     if ((event.metaKey || event.ctrlKey) && key === "z") {
       event.preventDefault();
-      history(event.shiftKey ? "redo" : "undo");
+      historyEdit(event.shiftKey ? "redo" : "undo");
       return;
     }
-    if (event.key === "Escape" && leftCollapsed && rightCollapsed) {
-      setLeftCollapsed(false);
-      setRightCollapsed(false);
+    if (event.key === "Escape" && focusIds) {
+      clearPresentation();
+      setNotice("Previous visibility restored.");
       return;
     }
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    if (key === "r") {
+    if (event.metaKey || event.ctrlKey || event.altKey || readOnly) return;
+    if (key === "r" && pending) {
       event.preventDefault();
-      if (placement)
-        changePlacement({
-          ...placement.transform,
-          rotation: ((placement.transform.rotation + 90) % 360) as QuarterTurn,
-        });
-      else if (selection) command({ type: "rotate", id: selection, quarterTurns: 1 });
+      changePlacement({
+        ...pending.transform,
+        rotation: ((pending.transform.rotation + 90) % 360) as QuarterTurn,
+      });
+      return;
     }
-    if (!selection || placement) return;
+    if (!selection || pending) return;
     if (key === "d" && event.shiftKey) {
       event.preventDefault();
       duplicate(selection);
+      return;
     }
-    if (event.key === "Delete" || event.key === "Backspace") {
+    if (key === "delete" || key === "backspace") {
       event.preventDefault();
-      command({ type: "remove", id: selection });
+      command({ type: "remove-selection", ids: selectionIds });
+      return;
     }
     if (event.target instanceof HTMLElement && event.target.closest("button,a,summary")) return;
     const step = event.shiftKey ? 1 : 0.5;
@@ -357,39 +441,47 @@ export function Workbench() {
       ArrowRight: { x: step, y: 0, z: 0 },
       ArrowUp: { x: 0, y: 0, z: -step },
       ArrowDown: { x: 0, y: 0, z: step },
-      PageUp: { x: 0, y: 0.2, z: 0 },
-      PageDown: { x: 0, y: -0.2, z: 0 },
+      PageUp: { x: 0, y: 0.4, z: 0 },
+      PageDown: { x: 0, y: -0.4, z: 0 },
     };
     if (moves[event.key]) {
       event.preventDefault();
-      command({ type: "translate", id: selection, delta: moves[event.key] });
+      command({ type: "translate-selection", ids: selectionIds, delta: moves[event.key] });
     }
   }
   const left = (
     <div className="min-h-0">
       <div className="flex border-b px-2">
-        {["Parts", "Structure", "Brief"].map((item) => (
+        {["Parts", "Structure", "References"].map((item) => (
           <button
             key={item}
+            className="min-h-11 flex-1 border-b-2 px-1 text-xs aria-pressed:border-primary aria-pressed:text-primary"
+            style={{ borderColor: tab === item ? "var(--primary)" : "transparent" }}
             aria-pressed={tab === item}
             onClick={() => setTab(item)}
-            className={`min-h-12 flex-1 border-b-2 text-xs ${tab === item ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
           >
             {item}
           </button>
         ))}
       </div>
       <div className="space-y-4 p-3">
-        {placement && (
-          <PlacementFields
-            key={`${placement.partId}-${placement.transform.x}-${placement.transform.y}-${placement.transform.z}`}
-            placement={placement}
+        {pending && (
+          <PlacementControls
+            key={pending.partId}
+            placement={pending}
+            model={model}
+            hiddenIds={hiddenIds}
+            repeat={repeat}
+            onRepeat={setRepeat}
             onChange={changePlacement}
             onPlace={place}
             onCancel={cancelPlacement}
-            onColorChange={changeCatalogColor}
-            onTargetChange={(target) => {
-              setPlacementError("");
+            onColor={(colorId) => {
+              setCatalogColor(colorId);
+              setPending((current) => (current ? { ...current, colorId } : null));
+            }}
+            onPolicy={(target) => {
+              setNotice("");
               setPending((current) =>
                 current
                   ? {
@@ -397,12 +489,10 @@ export function Workbench() {
                       target,
                       transform:
                         target === "ground"
-                          ? {
-                              ...current.transform,
-                              y:
-                                (partDefinitions.find((part) => part.id === current.partId)
-                                  ?.height ?? 0) / 2,
-                            }
+                          ? snapGridTransform(
+                              partDefinitions.find((part) => part.id === current.partId)!,
+                              current.transform,
+                            )
                           : current.transform,
                     }
                   : null,
@@ -411,33 +501,59 @@ export function Workbench() {
           />
         )}
         {tab === "Parts" ? (
-          <PartCatalog
-            onAdd={choosePart}
-            colorId={catalogColor}
-            onColorChange={changeCatalogColor}
-            selectedPartId={placement?.partId}
-          />
-        ) : tab === "Structure" ? (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-muted-foreground">Model structure</p>
-              <span className="text-xs text-muted-foreground">{model.groups.length} groups</span>
+              <h2 className="text-base">Parts library</h2>
+              <span className="tag">Original demo</span>
             </div>
+            <PartCatalog
+              onAdd={choosePart}
+              colorId={catalogColor}
+              onColorChange={setCatalogColor}
+              selectedPartId={pending?.partId}
+            />
+          </>
+        ) : tab === "Structure" ? (
+          <>
+            <label className="flex min-h-10 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={groupMode}
+                onChange={(e) => setGroupMode(e.target.checked)}
+              />
+              Select whole groups
+            </label>
+            {validScope && (
+              <div className="rounded-md border p-2 text-xs">
+                Inside: {model.groups.find((group) => group.id === validScope)?.name}
+                <Button className="mt-2 w-full" onClick={() => setScope(null)}>
+                  Exit group
+                </Button>
+              </div>
+            )}
             <Structure
               model={model}
-              selected={selection}
-              onSelect={select}
               hidden={hidden}
+              selected={selection}
+              selectedIds={selectionIds}
+              onSelect={select}
+              scope={validScope}
+              onSelectGroup={(groupId) => {
+                setSelected(getGroupInstanceIds(model, groupId));
+                setSelectedGroup(groupId);
+                setInspector("Selection");
+              }}
               onVisibility={(groupId) =>
-                setHidden((groups) =>
-                  groups.includes(groupId)
-                    ? groups.filter((group) => group !== groupId)
-                    : [...groups, groupId],
+                setHidden((current) =>
+                  current.includes(groupId)
+                    ? current.filter((id) => id !== groupId)
+                    : [...current, groupId],
                 )
               }
               onProtection={(groupId, value) =>
                 command({ type: "set-protection", groupId, protected: value })
               }
+              readOnly={readOnly}
             />
             <Button className="w-full" onClick={() => setTab("Parts")}>
               <Plus size={15} />
@@ -445,32 +561,7 @@ export function Workbench() {
             </Button>
           </>
         ) : (
-          <div className="space-y-4">
-            <div>
-              <p className="eyebrow mb-2">Design intention</p>
-              <h2 className="text-lg">{id === "blank" ? "An open exploration" : model.title}</h2>
-              <p className="mt-3 text-sm text-muted-foreground">
-                {id === "masseria"
-                  ? "A sunlit courtyard with quiet proportions, textured limestone and a roof of warm terracotta."
-                  : "Explore form and color with original demo bricks."}
-              </p>
-            </div>
-            <label className="block text-xs font-medium">
-              Your session note
-              <textarea
-                className="field mt-2 min-h-28"
-                placeholder="What would you like to explore?"
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-              />
-            </label>
-            <p className="text-xs text-muted-foreground">
-              Notes remain while this editor is open. They do not generate or validate a model.
-            </p>
-            <Link href="/new/" className="button w-full">
-              Open project brief
-            </Link>
-          </div>
+          <EditorReferences state={referenceState} />
         )}
       </div>
     </div>
@@ -481,63 +572,165 @@ export function Workbench() {
         {["Selection", "Checks", "Activity"].map((item) => (
           <button
             key={item}
+            className="min-h-11 flex-1 border-b-2 text-xs"
+            style={{ borderColor: inspector === item ? "var(--primary)" : "transparent" }}
             aria-pressed={inspector === item}
             onClick={() => setInspector(item)}
-            className={`min-h-12 flex-1 border-b-2 text-xs ${inspector === item ? "border-primary font-semibold text-primary" : "border-transparent text-muted-foreground"}`}
           >
             {item}
           </button>
         ))}
       </div>
-      <div className="p-4">
-        {inspector === "Selection" ? (
-          <SelectionInspector
-            model={model}
-            selected={selection}
-            onSelect={select}
-            command={command}
-            onDuplicate={duplicate}
-            onOpenCatalog={() => {
-              setTab("Parts");
-              setLeftCollapsed(false);
-              if (!window.matchMedia("(min-width: 1024px)").matches) setLeftOpen(true);
-            }}
-          />
-        ) : inspector === "Checks" ? (
-          <>
-            <h2 className="mb-2 text-base">Model checks</h2>
-            <p className="mb-5 text-xs text-muted-foreground">
-              No analysis has run. These capabilities are outside this preview.
-            </p>
-            {[
-              "Collision checks",
-              "Connection checks",
-              "Stability assessment",
-              "Build-order assessment",
-              "Physical testing",
-            ].map((label) => (
-              <div key={label} className="flex items-center gap-2 border-b py-3 text-xs">
-                <CircleDashed size={14} className="text-muted-foreground" />
-                <span>{label}</span>
-                <span className="ml-auto text-muted-foreground">Not run</span>
-              </div>
-            ))}
-            <p className="mt-4 text-xs text-muted-foreground">
-              Baseline: {model.baselineRevision}.{" "}
-              {model.revision !== model.baselineRevision
-                ? "The model has changed; baseline examples are out of date."
-                : "No engineering result or certification is implied."}
-            </p>
-          </>
-        ) : (
-          <>
+      <div className="space-y-4 p-4">
+        {inspector === "Checks" ? (
+          <Checks model={model} onFocus={focus} />
+        ) : inspector === "Activity" ? (
+          <section>
             <h2 className="text-base">Local edit history</h2>
             <p className="mt-3 text-sm">{entry.session.past.length} undoable changes</p>
-            <p className="mt-2 font-mono text-xs text-muted-foreground">{model.revision}</p>
-            <p className="mt-4 text-xs text-muted-foreground">
-              Undo and redo restore whole model revisions. Reloading the page resets this local
-              session.
+            <p className="mt-2 break-all font-mono text-xs">{model.revision}</p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              History retains at most 40 snapshots. New edits after undo replace the redo branch.
             </p>
+          </section>
+        ) : (
+          <>
+            <SelectionTools
+              model={model}
+              ids={selectionIds}
+              groupId={validSelectedGroup}
+              onGroup={setScope}
+              command={command}
+              readOnly={readOnly}
+              onFocus={() => focus(selectionIds)}
+              onHide={() => {
+                setHidden((current) => [...new Set([...current, ...selectionIds])]);
+                setNotice("Selection hidden; physical parts and counts are unchanged.");
+              }}
+              onClear={() => {
+                setSelected([]);
+                setSelectedGroup(null);
+              }}
+            />
+            <SelectionInspector
+              model={model}
+              selected={selectionIds.length === 1 ? selection : null}
+              onSelect={select}
+              command={command}
+              onDuplicate={duplicate}
+              readOnly={readOnly}
+              onOpenCatalog={() => {
+                setTab("Parts");
+                setLeftCollapsed(false);
+                if (!window.matchMedia("(min-width: 1024px)").matches) setSheet("left");
+              }}
+            />
+            {selectionIds.length === 1 && !readOnly && (
+              <EditorReplacement
+                model={model}
+                policy={editPolicy}
+                selectedId={selection}
+                onCommand={command}
+              />
+            )}
+            <details>
+              <summary className="min-h-10 py-2 text-sm">Precision & inspection</summary>
+              <div className="space-y-3 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Workplane controls constrain the ghost/drag plane. Canonical dimensions are
+                  unchanged.
+                </p>
+                <label className="block text-xs">
+                  Workplane normal
+                  <select
+                    className="field mt-1"
+                    value={workplane.axis}
+                    onChange={(e) =>
+                      setWorkplane({ ...workplane, axis: e.target.value as "x" | "y" | "z" })
+                    }
+                  >
+                    {["x", "y", "z"].map((axis) => (
+                      <option key={axis} value={axis}>
+                        {axis.toUpperCase()}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-xs">
+                  Workplane offset · studs
+                  <input
+                    type="number"
+                    className="field mt-1"
+                    step="0.1"
+                    value={workplane.offset}
+                    onChange={(e) => {
+                      if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber))
+                        setWorkplane({ ...workplane, offset: e.target.valueAsNumber });
+                    }}
+                  />
+                </label>
+                <Button
+                  className="w-full"
+                  aria-pressed={Boolean(section)}
+                  onClick={() => {
+                    setMode("inspect");
+                    setSection(section ? null : { axis: "x", offset: 0 });
+                    setPending(null);
+                  }}
+                >
+                  Visual section
+                </Button>
+                {section && (
+                  <>
+                    <label className="block text-xs">
+                      Section axis
+                      <select
+                        className="field mt-1"
+                        value={section.axis}
+                        onChange={(e) =>
+                          setSection({ ...section, axis: e.target.value as "x" | "y" | "z" })
+                        }
+                      >
+                        {["x", "y", "z"].map((axis) => (
+                          <option key={axis} value={axis}>
+                            {axis.toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-xs">
+                      Section offset · studs
+                      <input
+                        className="field mt-1"
+                        type="number"
+                        step="0.5"
+                        value={section.offset}
+                        onChange={(e) => {
+                          if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber))
+                            setSection({ ...section, offset: e.target.valueAsNumber });
+                        }}
+                      />
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Visual clipping only. No solid caps or physical cut.
+                    </p>
+                  </>
+                )}
+                <Button
+                  onClick={() =>
+                    setStepViewRequest((value) => ({ ...value, serial: value.serial + 1 }))
+                  }
+                >
+                  Restore step view
+                </Button>
+                <EditorStepPreview
+                  key={`${model.id}-${stepEpoch}`}
+                  model={model}
+                  sample={entry.fixture.instructions}
+                  onView={changeStepView}
+                />
+              </div>
+            </details>
           </>
         )}
       </div>
@@ -547,46 +740,69 @@ export function Workbench() {
     <div
       className="workbench-shell"
       data-focused={leftCollapsed && rightCollapsed}
+      data-revision={model.revision}
+      data-count={model.instances.length}
+      data-interaction={transient}
+      style={
+        {
+          "--editor-left-width": `${panelWidths.left}px`,
+          "--editor-right-width": `${panelWidths.right}px`,
+        } as CSSProperties
+      }
       onKeyDown={shortcut}
     >
-      <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b bg-surface px-4 py-1.5">
+      <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3 py-1.5">
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">{model.title}</h1>
+          <h1 className="truncate text-sm">{model.title}</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Design workspace <span className="mx-1">·</span>
-            <span>{model.instances.length.toLocaleString("en")} parts</span>
+            {model.instances.length.toLocaleString("en")} parts ·{" "}
+            <span className="font-mono">{model.revision}</span>
           </p>
         </div>
-        <ProjectNavigation id={id} active="editor" />
-        <div className="flex items-center gap-0.5">
+        <div className="flex rounded-md bg-surface-muted p-1" aria-label="Task modes">
+          {(["build", "inspect", "present"] as const).map((value) => (
+            <button
+              key={value}
+              className="min-h-9 rounded-sm px-3 text-sm capitalize aria-pressed:bg-surface aria-pressed:text-primary aria-pressed:shadow-sm"
+              aria-pressed={mode === value}
+              onClick={() => changeMode(value)}
+            >
+              {value[0].toUpperCase() + value.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center">
           <button
             className="icon-button"
             aria-label="Undo local edit"
-            title="Undo (⌘/Ctrl Z)"
-            disabled={!entry.session.past.length}
-            onClick={() => history("undo")}
+            disabled={readOnly || !entry.session.past.length}
+            onClick={() => historyEdit("undo")}
           >
             <Undo2 size={16} />
           </button>
           <button
             className="icon-button"
             aria-label="Redo local edit"
-            title="Redo (⌘/Ctrl Shift Z)"
-            disabled={!entry.session.future.length}
-            onClick={() => history("redo")}
+            disabled={readOnly || !entry.session.future.length}
+            onClick={() => historyEdit("redo")}
           >
             <Redo2 size={16} />
           </button>
-          <span className="mx-1 hidden h-5 border-l lg:block" />
+          <button
+            className="icon-button"
+            aria-label="Local project files"
+            onClick={() => setFileOpen(true)}
+          >
+            <FolderOpen size={16} />
+          </button>
           <button
             className="icon-button hidden lg:inline-flex"
             aria-label="Focus canvas"
             aria-pressed={leftCollapsed && rightCollapsed}
-            title="Expand the canvas by hiding both panels"
             onClick={() => {
-              const collapse = !(leftCollapsed && rightCollapsed);
-              setLeftCollapsed(collapse);
-              setRightCollapsed(collapse);
+              const value = !(leftCollapsed && rightCollapsed);
+              setLeftCollapsed(value);
+              setRightCollapsed(value);
             }}
           >
             <Maximize2 size={16} />
@@ -594,158 +810,380 @@ export function Workbench() {
           <button
             className="icon-button hidden lg:inline-flex"
             aria-label="Toggle parts panel"
-            title="Parts & structure"
-            onClick={() =>
-              window.matchMedia("(min-width: 1024px)").matches
-                ? setLeftCollapsed((value) => !value)
-                : setLeftOpen(true)
-            }
+            onClick={() => setLeftCollapsed((value) => !value)}
           >
             <PanelLeft size={16} />
           </button>
           <button
             className="icon-button hidden xl:inline-flex"
             aria-label="Toggle inspector panel"
-            title="Inspector"
-            onClick={() =>
-              window.matchMedia("(min-width: 1280px)").matches
-                ? setRightCollapsed((value) => !value)
-                : setRightOpen(true)
-            }
+            onClick={() => setRightCollapsed((value) => !value)}
           >
             <PanelRight size={16} />
           </button>
-          <Dialog
-            open={resetOpen}
-            onOpenChange={setResetOpen}
-            title="Reset this demo?"
-            description="This clears this model’s local edit history and restores its original sample."
-            trigger={
-              <button className="icon-button" aria-label="Reset demo">
-                <RotateCcw size={15} />
-              </button>
-            }
+          <button
+            className="icon-button"
+            aria-label="Reset demo"
+            onClick={() => setResetOpen(true)}
           >
-            <Button
-              variant="primary"
-              onClick={() => {
-                reset();
-                setSelected(null);
-                setHidden([]);
-                cancelPlacement();
-                setResetOpen(false);
-              }}
-            >
-              Restore baseline
-            </Button>
-          </Dialog>
-          <Dialog
-            title="Export preview"
-            description="Production model and PDF exports are not connected in this POC."
-            trigger={
-              <button className="icon-button" aria-label="Export preview">
-                <Download size={16} />
-              </button>
-            }
-          >
-            <p className="text-sm">
-              Explore the curated instruction layout. The browser’s print dialog provides a local
-              layout preview.
-            </p>
-            <Link href={`/instructions/?project=${id}`} className="button mt-4">
-              View instruction sample
-            </Link>
-          </Dialog>
+            <RotateCcw size={16} />
+          </button>
         </div>
       </div>
       {project.invalid && (
-        <p role="status" className="notice rounded-none">
-          Unknown project. Showing the courtyard sample.
-        </p>
+        <p className="notice rounded-none">Unknown project. Showing the courtyard sample.</p>
       )}
-      <div className="flex shrink-0 justify-between border-b bg-surface px-3 xl:hidden">
-        <Button variant="quiet" className="lg:hidden" onClick={() => setLeftOpen(true)}>
-          <PanelLeft size={15} />
-          Parts & structure{placement && <span className="size-2 rounded-full bg-primary" />}
-        </Button>
-        <Button variant="quiet" onClick={() => setRightOpen(true)}>
-          <PanelRight size={15} />
-          Inspector
-        </Button>
+      {hint && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-background px-3 py-1 text-xs text-muted-foreground">
+          <p>Choose a part → inspect its preview → Place or Escape. Undo is always close by.</p>
+          <button
+            className="button-quiet min-h-9 shrink-0 px-2"
+            aria-label="Dismiss interaction hint"
+            onClick={() => setHint(false)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3">
+        <div className="flex items-center gap-3">
+          <label className="flex min-h-10 items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={multiSelect}
+              onChange={(e) => setMultiSelect(e.target.checked)}
+            />
+            Multi-select
+          </label>
+          <span className="text-xs text-muted-foreground">{selectionIds.length} selected</span>
+          {hiddenIds.length > 0 && (
+            <button className="button text-xs" onClick={() => setHidden([])}>
+              Show hidden parts ({hiddenIds.length})
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="quiet"
+            className="lg:hidden"
+            onClick={(event) => {
+              event.currentTarget.focus();
+              setSheet("left");
+            }}
+          >
+            Parts & structure
+          </Button>
+          <Button
+            variant="quiet"
+            className="xl:hidden"
+            onClick={(event) => {
+              event.currentTarget.focus();
+              setSheet("right");
+            }}
+          >
+            Inspector
+          </Button>
+          <Dialog
+            title="Editor shortcuts"
+            description="Shortcuts apply when the editor owns focus. Text inputs retain normal typing and browser zoom."
+            trigger={
+              <button className="button-quiet flex min-h-10 items-center gap-1 px-2 text-xs">
+                <Keyboard size={15} />
+                Shortcuts
+              </button>
+            }
+          >
+            <ul className="space-y-2 text-sm">
+              <li>V / G / R: Select / Move / Rotate tools</li>
+              <li>F: fit selection or visible model</li>
+              <li>Shift + click: toggle selection</li>
+              <li>Arrow keys: move selection 0.5 stud; Shift: 1 stud</li>
+              <li>Page Up / Down: move vertically 0.4 stud</li>
+              <li>Shift D: duplicate active part</li>
+              <li>Escape: cancel preview or restore focus view</li>
+              <li>⌘/Ctrl Z: undo; Shift: redo</li>
+              <li>Secondary drag: orbit; middle or Space + primary: pan</li>
+            </ul>
+          </Dialog>
+        </div>
       </div>
+      {(focusIds || section || steps) && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-primary-muted px-3 py-1 text-xs">
+          <p>
+            {focusIds
+              ? `Focus lens · ${focusIds.length} pieces`
+              : section
+                ? "Visual section"
+                : "Curated step preview"}{" "}
+            · Canonical model unchanged
+          </p>
+          <Button
+            onClick={() => {
+              clearPresentation();
+              setNotice("Previous visibility restored.");
+            }}
+          >
+            Restore view
+          </Button>
+          <Button onClick={() => changeMode("build")}>Return to assembled Build</Button>
+        </div>
+      )}
       <div
         className="workbench-grid"
         data-left-collapsed={leftCollapsed}
         data-right-collapsed={rightCollapsed}
       >
-        <aside
-          aria-label="Parts and structure"
-          className={`hidden min-h-0 overflow-y-auto border-r bg-surface ${leftCollapsed ? "lg:hidden" : "lg:block"}`}
-        >
-          {left}
-        </aside>
+        {width >= 1024 && (
+          <aside
+            aria-label="Parts and structure"
+            className={`hidden min-h-0 overflow-y-auto border-r bg-surface ${leftCollapsed ? "lg:hidden" : "lg:block"}`}
+          >
+            {left}
+          </aside>
+        )}
         <div
           className="flex min-h-0 min-w-0 flex-col"
           role="region"
           tabIndex={0}
-          aria-label="Modeling workspace. Arrow keys move a selected brick, R rotates, Shift D duplicates."
-          onPointerDown={(event) => {
-            if (event.target instanceof HTMLCanvasElement)
-              event.currentTarget.focus({ preventScroll: true });
-          }}
+          aria-label="Modeling workspace"
         >
           <ModelViewport
-            model={model}
+            compactControls={width < 640}
+            model={proposal ?? model}
             assemblyView={entry.fixture.assemblyView}
             selected={selection}
+            selectedIds={impactIds.length ? impactIds : selectionIds}
+            multiSelect={multiSelect}
+            mode={mode}
+            onEditingLockChange={setViewLocked}
+            viewRequest={stepViewRequest}
+            assembledResetRequest={assembledResetRequest}
             onSelect={select}
-            hidden={hidden}
-            placement={placement}
+            onClearSelection={() => {
+              if (!pending) {
+                setSelected([]);
+                setSelectedGroup(null);
+              }
+            }}
+            hidden={hiddenIds}
+            focusIds={focusIds ?? undefined}
+            section={section ?? undefined}
+            workplane={workplane}
+            presentationIds={steps?.visibleIds}
+            mutedIds={steps?.mutedIds}
+            placement={pending}
             onPlacementChange={changePlacement}
             onPlace={place}
             onCancelPlacement={cancelPlacement}
-            onMove={(partId, delta) => command({ type: "translate", id: partId, delta })}
+            onCancelInteraction={() => setPending(null)}
+            onRotate={(partId, degrees) =>
+              command({
+                type: "rotate-selection",
+                ids: selectionIds.includes(partId) ? selectionIds : [partId],
+                pivot: model.instances.find((part) => part.id === partId)!.transform,
+                quarterTurns: degrees === 90 ? 1 : -1,
+              })
+            }
+            onMove={(partId, delta) =>
+              command({
+                type: "translate-selection",
+                ids: selectionIds.includes(partId) ? selectionIds : [partId],
+                delta,
+              })
+            }
           />
-          <div className="studio-secondary shrink-0">
-            <AssistantPreview model={model} variant={entry.fixture.variant} command={command} />
-          </div>
         </div>
-        <aside
-          aria-label="Project inspector"
-          className={`hidden min-h-0 overflow-y-auto border-l bg-surface ${rightCollapsed ? "xl:hidden" : "xl:block"}`}
-        >
-          {right}
-        </aside>
+        {width >= 1280 && (
+          <aside
+            aria-label="Project inspector"
+            className={`hidden min-h-0 overflow-y-auto border-l bg-surface ${rightCollapsed ? "xl:hidden" : "xl:block"}`}
+          >
+            {right}
+          </aside>
+        )}
       </div>
-      <div className="flex min-h-7 shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t bg-surface px-4 py-1 text-xs text-muted-foreground">
-        <p className="flex items-center gap-1.5">
+      <div className="shrink-0 border-t bg-surface">
+        <button
+          className="flex min-h-10 w-full items-center justify-between px-4 text-left text-xs"
+          aria-expanded={changesOpen}
+          onClick={() => setChangesOpen((value) => !value)}
+        >
+          <span>Changes · local experiment</span>
+          <span>{changesOpen ? "Collapse" : "Open"}</span>
+        </button>
+        {changesOpen && (
+          <div className="max-h-64 overflow-y-auto border-t px-4 py-3">
+            <EditorExperiment
+              comparisonResetRequest={stepEpoch}
+              model={model}
+              policy={editPolicy}
+              selectedIds={selectionIds}
+              onAccept={(preview) => {
+                if (mode !== "build" || viewLocked || section || steps) {
+                  setNotice("Return to assembled Build before accepting a local edit.");
+                  return false;
+                }
+                return project.acceptExperiment(preview);
+              }}
+              onPreview={previewModel}
+              onHighlight={setImpactIds}
+            />
+          </div>
+        )}
+      </div>
+      <div className="flex min-h-7 shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-surface px-3 py-1 text-xs text-muted-foreground">
+        <p className="flex items-center gap-1">
           <Info size={12} />
-          Local session · Reload resets edits
+          Local editor preview · download to keep edits
         </p>
         <p role="status" aria-live="polite">
-          {placementError ||
-            message ||
-            (placement ? "Choose a surface or enter placement coordinates" : "Ready to build")}
+          {notice || message || (pending ? "Preview only · Place commits once" : "Ready to build")}
         </p>
       </div>
       <Dialog
         sheet
-        open={leftOpen}
-        onOpenChange={setLeftOpen}
+        open={sheet === "left"}
+        onOpenChange={(open) => setSheet(open ? "left" : null)}
         title="Parts & structure"
-        description="Choose a part, inspect subassemblies or read your brief."
+        description="Choose parts or select stable model identities."
       >
-        {left}
+        {width < 1024 ? left : null}
       </Dialog>
       <Dialog
         sheet
-        open={rightOpen}
-        onOpenChange={setRightOpen}
+        open={sheet === "right"}
+        onOpenChange={(open) => setSheet(open ? "right" : null)}
         title="Project inspector"
-        description="Select and edit parts with keyboard-accessible controls."
+        description="Keyboard-accessible properties, diagnostics and inspection."
       >
-        {right}
+        {width < 1280 ? right : null}
       </Dialog>
+      <Dialog
+        open={resetOpen}
+        onOpenChange={setResetOpen}
+        title="Reset this demo?"
+        description="This discards local changes and undo history. Download a local project file first if you need them."
+      >
+        <Button
+          variant="primary"
+          onClick={() => {
+            reset();
+            setSelected([]);
+            setSelectedGroup(null);
+            setScope(null);
+            setHidden([]);
+            setPending(null);
+            clearPresentation();
+            setResetOpen(false);
+          }}
+        >
+          Restore baseline
+        </Button>
+      </Dialog>
+      <Dialog
+        open={fileOpen}
+        onOpenChange={setFileOpen}
+        title="Local project files"
+        description="Explicit downloads and loads only. Nothing is uploaded or saved automatically."
+      >
+        <ProjectNavigation id={project.id} active="editor" />
+        <details className="my-4">
+          <summary className="min-h-10 py-2 text-sm">Panel widths</summary>
+          <div className="grid grid-cols-2 gap-3">
+            {(["left", "right"] as const).map((side) => (
+              <label key={side} className="text-xs capitalize">
+                {side} panel · px
+                <select
+                  className="field mt-1"
+                  value={panelWidths[side]}
+                  onChange={(event) =>
+                    setPanelWidths((current) => ({
+                      ...current,
+                      [side]: Number(event.target.value),
+                    }))
+                  }
+                >
+                  {[240, 256, 272, 280, 288, 304, 320, 360].map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Native keyboard controls; collapsing a panel restores space for precision.
+          </p>
+        </details>
+        <EditorFiles
+          model={model}
+          policy={editPolicy}
+          dirty={entry.session.past.length > 0}
+          onLoad={(value) => opened({ model: value, variant: null, instructions: null })}
+        />
+        <div className="mt-6 border-t pt-4">
+          <h2 className="text-base">Original studies</h2>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Opening a study replaces this session. Download first to retain edits.
+          </p>
+          <SampleChooser dirty={entry.session.past.length > 0} onOpen={opened} />
+          <Link href="/editor/?project=blank" className="button mt-3">
+            Open empty project
+          </Link>
+        </div>
+      </Dialog>
+    </div>
+  );
+}
+function SampleChooser({
+  dirty,
+  onOpen,
+}: {
+  dirty: boolean;
+  onOpen: (fixture: SceneFixture) => void;
+}) {
+  const [sample, setSample] = useState<EditorFixtureId>("placement-lab");
+  const [confirm, setConfirm] = useState(false);
+  const [error, setError] = useState("");
+  async function open() {
+    try {
+      const { loadEditorFixture } = await import("@/fixtures/editor");
+      onOpen(await loadEditorFixture(sample));
+    } catch {
+      setError("The local fixture could not be opened. Current work is unchanged.");
+    }
+  }
+  return (
+    <div className="mt-3 space-y-3">
+      <label className="block text-xs">
+        Study
+        <select
+          className="field mt-1"
+          value={sample}
+          onChange={(e) => {
+            setSample(e.target.value as EditorFixtureId);
+            setConfirm(false);
+          }}
+        >
+          <option value="empty">Empty scene</option>
+          <option value="placement-lab">Placement lab</option>
+          <option value="courtyard-study">Courtyard study</option>
+          <option value="rover-study">Rover study</option>
+          <option value="stress-1000">Stress · 1,000 parts</option>
+          <option value="stress-5000">Stress · 5,000 parts (opt-in)</option>
+        </select>
+      </label>
+      {dirty && (
+        <label className="flex min-h-10 items-center gap-2 text-xs">
+          <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} />
+          Discard current unsaved edits
+        </label>
+      )}
+      <Button disabled={dirty && !confirm} onClick={open}>
+        Open study
+      </Button>
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

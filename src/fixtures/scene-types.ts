@@ -44,6 +44,7 @@ export interface AssemblyViewMetadata {
 
 export interface SceneFixture {
   readonly model: Model;
+  readonly initiallyHiddenIds?: readonly string[];
   readonly variant: SampleVariant | null;
   readonly instructions: InstructionSample | null;
   readonly assemblyView?: AssemblyViewMetadata;

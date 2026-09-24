@@ -83,7 +83,7 @@ test("FE-004 / FE-020: active 3D requests only its selected scene and same-origi
       forbidden.push(`${request.method()} ${url.href}`);
   });
   await page.goto("/editor/?project=masseria");
-  await expect(page.getByText("Drag to orbit · Scroll to zoom · Click a brick")).toBeVisible({
+  await expect(page.locator('[data-scene-ready="true"]')).toBeVisible({
     timeout: 20000,
   });
   await page.waitForLoadState("networkidle");

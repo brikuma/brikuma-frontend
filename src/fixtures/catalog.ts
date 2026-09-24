@@ -628,7 +628,7 @@ export const colors = [
 export const editPolicy: EditingPolicy = {
   parts: partDefinitions,
   colors: colors.map((color) => color.id),
-  maxInstances: 1200,
+  maxInstances: 5000,
   historyLimit: 40,
   bounds: 40,
 };

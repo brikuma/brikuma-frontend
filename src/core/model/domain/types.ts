@@ -41,6 +41,7 @@ export interface Subassembly {
   readonly id: string;
   readonly name: string;
   readonly protected: boolean;
+  readonly parentId?: string;
 }
 
 export interface Model {
@@ -72,6 +73,13 @@ export interface DomainError {
     | "protected-group"
     | "piece-limit"
     | "revision-conflict"
+    | "group-cycle"
+    | "occupied-volume"
+    | "unsupported-connector"
+    | "missing-connection"
+    | "incompatible-footprint"
+    | "invalid-file"
+    | "unsupported-version"
     | "empty-history"
     | "no-change";
   readonly message: string;
@@ -96,6 +104,34 @@ export interface VariantPreview {
 }
 
 export type EditCommand =
+  | {
+      readonly type: "place";
+      readonly instance: PartInstance;
+      readonly placement: "connect" | "grid" | "free";
+      readonly baseRevision: string;
+    }
+  | { readonly type: "remove-selection"; readonly ids: readonly string[] }
+  | {
+      readonly type: "recolor-selection";
+      readonly ids: readonly string[];
+      readonly colorId: string;
+    }
+  | {
+      readonly type: "translate-selection";
+      readonly ids: readonly string[];
+      readonly delta: Readonly<{ x: number; y: number; z: number }>;
+    }
+  | {
+      readonly type: "rotate-selection";
+      readonly ids: readonly string[];
+      readonly pivot: Readonly<{ x: number; y: number; z: number }>;
+      readonly quarterTurns: 1 | -1;
+    }
+  | { readonly type: "create-group"; readonly group: Subassembly; readonly ids: readonly string[] }
+  | { readonly type: "rename-group"; readonly groupId: string; readonly name: string }
+  | { readonly type: "reparent-group"; readonly groupId: string; readonly parentId?: string }
+  | { readonly type: "move-to-group"; readonly ids: readonly string[]; readonly groupId: string }
+  | { readonly type: "replace-part"; readonly id: string; readonly partId: string }
   | { readonly type: "add"; readonly instance: PartInstance }
   | { readonly type: "remove"; readonly id: string }
   | { readonly type: "recolor"; readonly id: string; readonly colorId: string }

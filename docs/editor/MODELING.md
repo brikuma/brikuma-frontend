@@ -1,0 +1,55 @@
+# Editor model and supported geometry
+
+Status: implemented pure contracts; executed evidence belongs to [evidence](EVIDENCE.md). The existing [core contract](../engineering/CORE.md) and [public API](../../src/core/model/public.ts) remain the context owners. No second model context or framework dependency is introduced.
+
+## Coordinate and identity contract
+
+Canonical values retain the existing right-handed, Y-up stud-pitch coordinate system. One stud pitch is one model unit; nominal brick and plate body heights are 1.2 and 0.4. A transform positions the body center and permits only quarter turns about Y. X/Z use 0.1-stud values, Y uses 0.05. Positions are finite, bounded by the editing policy, with Y nonnegative; scale, skew and reflection keys are rejected. Dimensions are nominal original demonstration values, not manufactured tolerance measurements.
+
+`fromLDrawPoint` translates a future source point as `(x, -y, -z) / 20`; this changes basis by a proper 180-degree rotation about X, preserving handedness. Existing procedural geometry is already Y-up and must not be converted again. `rotateVector` maps local translation vectors through the canonical quarter turn. No LDraw geometry import is implemented. LDraw's matrix conventions are not silently applied to current transforms.
+
+Stable part IDs belong to logical instances; render buckets, studs, shells, guides and ghosts never allocate identities. Group labels may change without changing IDs. Groups have optional `parentId`; validated construction rejects missing parents and ancestor cycles. Group membership changes preserve world transforms because group transforms are not stored.
+
+## Commands and history
+
+[Commands](../../src/core/model/application/commands.ts) retain existing single-part operations and add atomic `translate-selection`, `rotate-selection`, `recolor-selection`, `remove-selection`, `create-group`, `rename-group`, `reparent-group`, `move-to-group`, `replace-part` and `place`. Every command validates the complete result before accepting it. Bulk rotation uses one explicit world pivot, preserves distances, and rotates all members rigidly. User interfaces submit the complete affected IDs when operating on groups; `getGroupInstanceIds` includes descendants.
+
+Protection is inherited from ancestors. Every affected instance and destination group is checked before an edit; one protected member rejects the entire operation. Explicit protection changes may unlock that group, but cannot bypass a protected ancestor. Protection changes enter undo history without invalidating geometry revision. Other accepted model changes allocate monotonically increasing session revisions. Loaded `model-id-local-N` revisions continue at N+1. Undo/redo restore exact snapshots; branching discards redo. Default history retains 40 model snapshots containing values only, never geometry resources. A zero history limit retains no preceding snapshot. No-op commands return `no-change`, do not advance revision and do not enter history.
+
+## Placement and independent coverage
+
+The `place` command takes `instance`, `baseRevision`, and an explicit `placement` policy:
+
+| Policy        | Implemented validation                                                                                                                                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connect       | Supported rectangular source, coincident supported receiver/stud, no conservative material conflict, no overlapping unsupported geometry, current revision and ordinary model invariants. |
+| Grid          | Footprint-aligned one-stud horizontal and 0.4-stud vertical increments above the ground; known material conflicts block; unsupported coverage remains a stated limitation.                |
+| Free position | Ordinary model invariants only. Connections and overlap are not placement acceptance claims.                                                                                              |
+
+Existing unrestricted add/transform commands intentionally support design drafts. The UI must use `place` for strict connector placement; preview and commit both use the same pure validation. Hidden pieces remain physical members because diagnostic APIs never receive visibility flags. A preview creates no history or canonical instance.
+
+`getPlacementCandidates` receives a model, catalog definitions, source definition/transform, source receiver index, orientation policy and optional eligible target IDs, excluded IDs, maximum distance, previous candidate and result limit. The bounded source/target subset consists of integer rectangular brick/plate footprints with heights 0.4 or 1.2. Top studs and underside receivers are distinct capabilities; smooth tiles receive but do not offer top studs. Slopes, round parts and custom architectural details may render and expose legacy nominal sites, but strict Connect does not assert their supported overlap coverage.
+
+Keep orientation considers only the starting quarter turn. Align considers the four discrete turns. Candidates align a selected source receiver to a target stud; rank by required translation, orientation change, then stable identity. Expensive occupied-volume checks run only on the bounded ranked result list, rather than on every possible connector. Default search bound is six studs, with at most eight displayed candidates (caller may request up to 32). The previous candidate remains first within 0.25 stud of the best distance. This is a world-space manual-selection heuristic, **not a screen-space magnetic snapping implementation**. Screen-distance ranking and zoom-aware enter/exit thresholds remain unimplemented. Candidate diagnostics report occupied targets rather than hiding their explanation; strict commit rejects conflicts. No physical probability or certainty percentage is computed.
+
+## Occupied-material diagnostics
+
+[Diagnostic rule `original-rectangular-shell-v1`](../../src/core/model/domain/diagnostics.ts) is independent of rendering quality and uses a broad bounding filter followed by composed occupied volumes. Supported rectangular geometry includes four side walls, top shell, cylindrical studs, underside hollow space, annular support tubes or pins. The volumes retain the original renderer's nominal side/body clearances and approximate details; rounded bevels are conservatively enveloped. AABB intersection alone is not a final result. Legal aligned studs enter receiver voids and are not flagged merely because their broad bounds overlap.
+
+The numerical intersection tolerance is 0.00001 stud. It is separate from clearances, pixel target sizes and visual antialiasing. Annular cylinders are compared by outer/inner radial extents; box/cylinder tests compare nearest/farthest extents. Only Y-axis cylindrical volumes and quarter-turn boxes are supported. Conservative conflicts can include material near omitted bevel details; they are geometric preview diagnostics, not manufacturing proof.
+
+`diagnosePlacement` returns category, rule, model revision, current state, supported coverage, conflicting IDs, unchecked IDs and checked pair count. `no-conflict` means no intersecting supported conservative volumes. Unsupported intersecting geometry returns `not-checked`; unsupported shapes outside a known broad bound do not create a fabricated collision. `diagnoseModel` reports conflicts and unsupported instance IDs for the model. Physical assessment is always `not-evaluated`. Displayed results must be marked stale whenever their stored revision no longer matches the document. Quality and visibility cannot change the result because neither is a diagnostic input.
+
+## Experiments and replacement
+
+[Experiment previews](../../src/core/model/application/experiments.ts) execute a real command on an isolated session and derive actual added, removed, transformed, recolored and replaced IDs, touched groups, count delta and stale-check implications. The preview records both base revision and a full canonical signature including group protection. Accept revalidates both and reruns the original command into the current session as one transaction. Discard does not mutate anything. The signature is a local equality guard, not a cryptographic or security claim.
+
+Same-footprint replacement preserves instance identity and its body-bottom height. Width/depth must match. `getReplacementFeedback` reports unchanged/changed connectors for the bounded supported subset; otherwise it reports unknown. A changed height can affect neighboring geometry or contacts; replacement is a draft edit and does not assert compatibility with the surrounding assembly. No general mirrored-part or mechanical replacement solver is implemented.
+
+## Explicit local files
+
+[Project files](../../src/core/model/application/project-file.ts) use `format: brikuma-scene`, `schemaVersion: 1`, and `coordinates: stud-y-up-quarter-turn-v1`. Serialization contains canonical model data only: no camera, renderer object, geometry asset, image reference, automatic persistence or remote save. `parseProject` rejects malformed/future versions, unknown keys, nonfinite/off-grid transforms, scale/reflection, unknown catalog/color references, duplicate identities, missing groups, hierarchy cycles and control characters in labels. The parser limit is 5,242,880 JavaScript code units (the browser picker separately limits file bytes to 4 MiB), groups are bounded at 1,000, and part count uses the current editing policy. Import validates fully before the browser adapter replaces a document; no partial load exists. The browser UI owns the explicit discard-unsaved-work confirmation.
+
+## Tests and limits
+
+[Specialist core tests](../../tests/unit/editor-modeling.test.ts) cover EDT-003–010, EDT-016–018, EDT-021–025, EDT-042–043 and EDT-048 at the pure API level. These are not browser-pointer, GPU, physical, accessibility or participant-study evidence. Existing [model](../../tests/unit/model.test.ts), [connection](../../tests/unit/connections.test.ts) and [manual editing](../../tests/unit/manual-modeling.test.ts) regression tests remain applicable. Actual command results are recorded separately from implemented coverage.

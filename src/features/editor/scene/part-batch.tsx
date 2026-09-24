@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useThree, type ThreeEvent } from "@react-three/fiber";
-import { BoxGeometry, Color, EdgesGeometry, InstancedMesh, Object3D } from "three";
+import { BoxGeometry, Color, EdgesGeometry, InstancedMesh, Object3D, Plane, Vector3 } from "three";
 import type { GridTransform, PartDefinition, PartInstance } from "@/core/model/public";
 import { colors, partDefinitions } from "@/fixtures/catalog";
-import type { ModelViewportProps, RenderQuality } from "../viewport-types";
+import type { ModelViewportProps, RenderQuality, ViewPlane } from "../viewport-types";
+import { pointIsVisible } from "./editing-plane";
+import { clippedInstanceRaycast } from "./picking";
 import { buildPartGeometry, buildStudGeometry } from "./part-geometry";
 import { BODY_VERTICAL_CLEARANCE, STUD_HEIGHT } from "./brick-geometry";
 import { ZERO_ASSEMBLY_OFFSET, type AssemblyOffset } from "../assembly-view";
@@ -12,6 +14,19 @@ export type ScenePointer = ThreeEvent<PointerEvent>;
 export interface DragPreview {
   id: string;
   transform: GridTransform;
+  ids?: readonly string[];
+  delta?: { x: number; y: number; z: number };
+}
+export function previewTransform(part: PartInstance, drag: DragPreview | null) {
+  if (drag?.id === part.id) return drag.transform;
+  if (drag?.ids?.includes(part.id) && drag.delta)
+    return {
+      ...part.transform,
+      x: part.transform.x + drag.delta.x,
+      y: part.transform.y + drag.delta.y,
+      z: part.transform.z + drag.delta.z,
+    };
+  return part.transform;
 }
 export function PartBatch({
   definition,
@@ -23,6 +38,8 @@ export function PartBatch({
   onPick,
   onOver,
   onOut,
+  section,
+  muted = false,
 }: {
   definition: PartDefinition;
   parts: readonly PartInstance[];
@@ -37,6 +54,8 @@ export function PartBatch({
   onPick: (event: ThreeEvent<MouseEvent>, part: PartInstance) => void;
   onOver: (id: string) => void;
   onOut: () => void;
+  section?: ViewPlane | null;
+  muted?: boolean;
 }) {
   const body = useRef<InstancedMesh>(null);
   const studs = useRef<InstancedMesh>(null);
@@ -46,6 +65,23 @@ export function PartBatch({
   const studGeometry = useMemo(() => buildStudGeometry(detailed), [detailed]);
   const studCount = definition.studs ? parts.length * definition.width * definition.depth : 0;
   const invalidate = useThree((state) => state.invalidate);
+  const clippingPlanes = useMemo(
+    () =>
+      section
+        ? [
+            new Plane(
+              new Vector3(
+                section.axis === "x" ? -1 : 0,
+                section.axis === "y" ? -1 : 0,
+                section.axis === "z" ? -1 : 0,
+              ),
+              section.offset,
+            ),
+          ]
+        : [],
+    [section],
+  );
+  const raycast = useMemo(() => clippedInstanceRaycast(section), [section]);
   useEffect(
     () => () => {
       geometry.dispose();
@@ -59,15 +95,11 @@ export function PartBatch({
     let studIndex = 0;
     for (let index = 0; index < parts.length; index++) {
       const part = parts[index];
-      const t = drag?.id === part.id ? drag.transform : part.transform;
+      const t = previewTransform(part, drag);
       const color = new Color(
         colors.find((entry) => entry.id === part.colorId)?.hex ?? colors[0].hex,
       );
-      const seed = [...part.id].reduce(
-        (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
-        7,
-      );
-      color.multiplyScalar(0.94 + ((seed % 101) / 100) * 0.11);
+      if (muted) color.lerp(new Color("#eeeae0"), 0.78);
       const offset = offsets.get(part.id) ?? ZERO_ASSEMBLY_OFFSET;
       object.position.set(t.x + offset.x, t.y + offset.y, t.z + offset.z);
       object.rotation.set(0, (t.rotation * Math.PI) / 180, 0);
@@ -97,11 +129,15 @@ export function PartBatch({
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.computeBoundingSphere();
       mesh.computeBoundingBox();
+      mesh.userData.partIds = parts.map((part) => part.id);
+      mesh.userData.instancesPerPart =
+        mesh === studs.current ? definition.width * definition.depth : 1;
     }
     invalidate();
-  }, [definition, drag, offsets, invalidate, parts]);
+  }, [definition, drag, offsets, invalidate, muted, parts]);
   function instance(event: ThreeEvent<MouseEvent | PointerEvent>, isStud: boolean) {
     if (event.instanceId === undefined) return undefined;
+    if (!pointIsVisible(event.point, section)) return undefined;
     return parts[
       isStud
         ? Math.floor(event.instanceId / (definition.width * definition.depth))
@@ -135,9 +171,11 @@ export function PartBatch({
         if (part) onPointer("cancel", event, part);
       },
       onPointerOver: (event: ScenePointer) => {
-        event.stopPropagation();
         const part = instance(event, isStud);
-        if (part) onOver(part.id);
+        if (part) {
+          event.stopPropagation();
+          onOver(part.id);
+        }
       },
       onPointerOut: onOut,
     };
@@ -145,6 +183,7 @@ export function PartBatch({
   return (
     <>
       <instancedMesh
+        raycast={raycast}
         ref={body}
         args={[geometry, undefined, parts.length]}
         castShadow
@@ -152,6 +191,7 @@ export function PartBatch({
         {...handlers(false)}
       >
         <meshPhysicalMaterial
+          clippingPlanes={clippingPlanes}
           vertexColors={foliage}
           roughness={
             foliage
@@ -168,6 +208,7 @@ export function PartBatch({
       </instancedMesh>
       {studCount > 0 && (
         <instancedMesh
+          raycast={raycast}
           ref={studs}
           args={[studGeometry, undefined, studCount]}
           castShadow
@@ -175,6 +216,7 @@ export function PartBatch({
           {...handlers(true)}
         >
           <meshPhysicalMaterial
+            clippingPlanes={clippingPlanes}
             roughness={0.28}
             metalness={0}
             clearcoat={quality === "studio" ? 0.26 : 0}

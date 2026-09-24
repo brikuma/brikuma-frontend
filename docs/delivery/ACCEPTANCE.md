@@ -1,5 +1,11 @@
 # Acceptance and evidence
 
+## Editor specialist checkpoint — 2026-09-24
+
+The focused editor pass extends frontend baseline `8f8e919`; its current executed results and remaining limits are recorded in [editor evidence](../editor/EVIDENCE.md), with [requirement coverage](../editor/README.md). That ledger supersedes historical editor counts, contracts and measurements below for this candidate. Other product routes remain preserved and regression-tested. The versioned local project download, actual PNG output and deterministic basic placement kernel are authorized by the specialist brief; they do not imply a backend, cloud save, physical certification or general CAD pipeline.
+
+Exact candidate identity and the independent review are bound through the existing `artifacts/quality/` records. Root integration remains separately blocked by missing approved remotes; it is not manufactured by this frontend implementation.
+
 ID: FE-DEL-002
 
 Owner/scope: frontend repository

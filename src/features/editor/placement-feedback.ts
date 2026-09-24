@@ -1,7 +1,6 @@
 import {
   findStudContacts,
-  getPartConnections,
-  hasOccupiedStudSpace,
+  validatePlacement,
   type Model,
   type PartDefinition,
   type StudContact,
@@ -15,39 +14,31 @@ export interface PlacementFeedback {
   readonly contacts: readonly StudContact[];
 }
 
+/** Preview uses the same core policy as the committed place command. */
 export function placementFeedback(
   model: Model,
   definitions: readonly PartDefinition[],
   placement: PlacementPreview,
 ): PlacementFeedback {
   const definition = definitions.find((item) => item.id === placement.partId);
-  const blocked = (message: string): PlacementFeedback => ({
-    allowed: false,
-    kind: "blocked",
-    message,
-    contacts: [],
-  });
-  if (!definition) return blocked("Choose a part first");
-  if (placement.target === "free")
-    return {
-      allowed: true,
-      kind: "free",
-      message: "Free placement · no connector snapping",
-      contacts: [],
-    };
-  if (hasOccupiedStudSpace(model, definitions, definition, placement.transform))
-    return blocked("Space occupied · choose another position");
-  if (Math.abs(placement.transform.y - definition.height / 2) < 0.001)
-    return { allowed: true, kind: "ground", message: "On the ground plane", contacts: [] };
-  if (placement.target === "ground") return blocked("Ground placement must touch the ground plane");
-  if (!getPartConnections(definition).receivesStuds)
-    return blocked("This detail has no stud socket · use Free placement");
-  const contacts = findStudContacts(model, definitions, definition, placement.transform);
-  if (!contacts.length) return blocked("No matching studs · point at a studded surface");
+  if (!definition)
+    return { allowed: false, kind: "blocked", message: "Choose a part first", contacts: [] };
+  const mode =
+    placement.target === "free" ? "free" : placement.target === "ground" ? "grid" : "connect";
+  const result = validatePlacement(model, definitions, definition, placement.transform, mode);
+  if (!result.ok)
+    return { allowed: false, kind: "blocked", message: result.error.message, contacts: [] };
+  const contacts =
+    mode === "connect" ? findStudContacts(model, definitions, definition, placement.transform) : [];
   return {
     allowed: true,
-    kind: "connected",
-    message: `${contacts.length} stud${contacts.length === 1 ? "" : "s"} aligned · click to attach`,
+    kind: mode === "connect" ? "connected" : mode === "grid" ? "ground" : "free",
+    message:
+      mode === "connect"
+        ? `${contacts.length} stud${contacts.length === 1 ? "" : "s"} aligned · click to attach`
+        : mode === "grid"
+          ? "Aligned grid draft · click to place"
+          : "Free position · unverified draft",
     contacts,
   };
 }
