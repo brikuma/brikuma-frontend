@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+artifacts
+package-lock.json
+.agents
+.claude
+skills-lock.json
+next-env.d.ts
+public/assets/previews

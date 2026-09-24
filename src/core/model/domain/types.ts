@@ -1,0 +1,113 @@
+export type QuarterTurn = 0 | 90 | 180 | 270;
+
+export interface GridTransform {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly rotation: QuarterTurn;
+}
+
+export interface PartDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly width: number;
+  readonly height: number;
+  readonly depth: number;
+  readonly studs: boolean;
+  readonly shape: "brick" | "plate" | "slope" | "cylinder";
+}
+
+export interface PartInstance {
+  readonly id: string;
+  readonly partId: string;
+  readonly colorId: string;
+  readonly groupId: string;
+  readonly transform: GridTransform;
+}
+
+export interface Subassembly {
+  readonly id: string;
+  readonly name: string;
+  readonly protected: boolean;
+}
+
+export interface Model {
+  readonly id: string;
+  readonly title: string;
+  readonly baselineRevision: string;
+  readonly revision: string;
+  readonly instances: readonly PartInstance[];
+  readonly groups: readonly Subassembly[];
+}
+
+export interface EditingPolicy {
+  readonly parts: readonly PartDefinition[];
+  readonly colors: readonly string[];
+  readonly maxInstances: number;
+  readonly historyLimit: number;
+  readonly bounds: number;
+}
+
+export interface DomainError {
+  readonly code:
+    | "invalid-model"
+    | "invalid-transform"
+    | "unknown-part"
+    | "unknown-color"
+    | "unknown-instance"
+    | "unknown-group"
+    | "duplicate-id"
+    | "protected-group"
+    | "piece-limit"
+    | "revision-conflict"
+    | "empty-history"
+    | "no-change";
+  readonly message: string;
+}
+
+export type Result<T> =
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: DomainError };
+
+export interface SampleVariant {
+  readonly id: string;
+  readonly title: string;
+  readonly description: string;
+  readonly baseRevision: string;
+  readonly removeIds: readonly string[];
+  readonly additions: readonly PartInstance[];
+}
+
+export interface VariantPreview {
+  readonly pieceCount: number;
+  readonly removedCount: number;
+  readonly addedCount: number;
+}
+
+export type EditCommand =
+  | { readonly type: "add"; readonly instance: PartInstance }
+  | { readonly type: "remove"; readonly id: string }
+  | { readonly type: "recolor"; readonly id: string; readonly colorId: string }
+  | {
+      readonly type: "translate";
+      readonly id: string;
+      readonly delta: Readonly<{ x: number; y: number; z: number }>;
+    }
+  | {
+      readonly type: "set-protection";
+      readonly groupId: string;
+      readonly protected: boolean;
+    }
+  | { readonly type: "apply-variant"; readonly variant: SampleVariant };
+
+export interface ModelSession {
+  readonly present: Model;
+  readonly past: readonly Model[];
+  readonly future: readonly Model[];
+  readonly nextRevision: number;
+}
+
+export interface BomLine {
+  readonly partId: string;
+  readonly colorId: string;
+  readonly quantity: number;
+}

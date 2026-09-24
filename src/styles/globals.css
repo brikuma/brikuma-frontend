@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    background: var(--background);
+    color: var(--foreground);
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled),
+  select,
+  summary {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
+  }
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  ::selection {
+    background: var(--primary-muted);
+  }
+}
+@layer components {
+  .button {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-control-border bg-surface px-4 py-2 text-sm font-medium transition-colors hover:bg-surface-muted disabled:pointer-events-none;
+  }
+  .button-primary {
+    @apply border-primary bg-primary text-primary-foreground hover:bg-primary-hover;
+  }
+  .button-quiet {
+    @apply border-transparent bg-transparent hover:bg-surface-muted;
+  }
+  .icon-button {
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-md border border-transparent hover:bg-surface-muted;
+  }
+  .field {
+    @apply min-h-11 min-w-0 max-w-full w-full rounded-md border border-control-border bg-surface px-3 py-2 text-sm text-foreground;
+  }
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground;
+  }
+  .panel-heading {
+    @apply text-base font-semibold tracking-tight;
+  }
+  .page-wrap {
+    @apply mx-auto w-full max-w-[1600px] px-4 py-8 md:px-8 lg:px-12 lg:py-10;
+  }
+  .section-rule {
+    @apply border-t border-border pt-6;
+  }
+  .tag {
+    @apply inline-flex items-center gap-1.5 rounded-sm bg-surface-muted px-2 py-1 text-xs font-medium;
+  }
+  .notice {
+    @apply rounded-md border border-border bg-surface-muted p-3 text-sm text-muted-foreground;
+  }
+  .workbench-grid {
+    @apply grid min-w-0 grid-cols-1 lg:grid-cols-[256px_minmax(0,1fr)] xl:grid-cols-[256px_minmax(0,1fr)_280px] 2xl:grid-cols-[288px_minmax(0,1fr)_304px];
+  }
+  .viewport-grid {
+    background-image: radial-gradient(var(--border) 0.8px, transparent 0.8px);
+    background-size: 20px 20px;
+  }
+}
+@media (min-width: 1024px) and (min-height: 740px) {
+  .workbench-grid {
+    height: calc(100dvh - 200px);
+    min-height: 560px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+@media print {
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .instruction-sheet {
+    break-inside: avoid;
+    border: 0;
+    box-shadow: none;
+  }
+}

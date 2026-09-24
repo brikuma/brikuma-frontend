@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "conditionalLinks": [
+    {
+      "source": "AGENTS.md",
+      "target": "../AGENTS.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "AGENTS.md",
+      "target": "../docs/ARCHITECTURE.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "AGENTS.md",
+      "target": "../docs/QUALITY_GATES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "AGENTS.md",
+      "target": "../docs/REPOSITORIES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "CLAUDE.md",
+      "target": "../AGENTS.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "CONTRIBUTING.md",
+      "target": "../CONTRIBUTING.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/ai/HANDOFF.md",
+      "target": "../docs/REPOSITORIES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/ai/REVIEW.md",
+      "target": "../docs/ai/REVIEW_POLICY.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/ai/WORKFLOW.md",
+      "target": "../docs/ai/REVIEW_POLICY.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/DECISIONS.md",
+      "target": "../docs/DECISIONS.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/delivery/PLAN.md",
+      "target": "../docs/ROADMAP.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/engineering/ARCHITECTURE.md",
+      "target": "../docs/ARCHITECTURE.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/product/CONTEXT.md",
+      "target": "../docs/PROJECT_CONTEXT.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/product/FRONTEND_SCOPE.md",
+      "target": "../docs/ARCHITECTURE.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/README.md",
+      "target": "../docs/README.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/references/README.md",
+      "target": "../docs/SOURCES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/SOURCES.md",
+      "target": "../docs/SOURCES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/TRACEABILITY.md",
+      "target": "../docs/PROJECT_CONTEXT.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/TRACEABILITY.md",
+      "target": "../docs/REPOSITORIES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "docs/TRACEABILITY.md",
+      "target": "../docs/SOURCES.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "LEGEND.md",
+      "target": "../LEGEND.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "README.md",
+      "target": "../docs/README.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    },
+    {
+      "source": "SECURITY.md",
+      "target": "../SECURITY.md",
+      "reason": "Canonical parent governance or explicitly linked sibling scope; report unavailable in standalone checkout."
+    }
+  ]
+}

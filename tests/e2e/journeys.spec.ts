@@ -1,0 +1,219 @@
+import { expect, test, type Page } from "@playwright/test";
+
+const projectNav = (page: Page) => page.getByRole("navigation", { name: "Project navigation" });
+
+test("FE-002: workspace categories, search, empty state and a direct sample route", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Create something");
+  await page.getByRole("button", { name: "Creatures", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Open Moss & mischief" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Field rover" })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Search projects" }).fill("no such model");
+  await expect(page.getByRole("heading", { name: "No projects match yet." })).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await page.getByRole("link", { name: "Open The courtyard house" }).click();
+  await expect(page).toHaveURL(/editor\/\?project=masseria/);
+  await expect(
+    page.getByRole("heading", { name: "The courtyard house", exact: true }),
+  ).toBeVisible();
+});
+
+test("FE-006 / FE-012: protect facade, compare an authored roof, apply and undo", async ({
+  page,
+}) => {
+  await page.goto("/editor/?project=masseria&noWebgl=1");
+  await expect(page.getByTestId("piece-count")).toHaveText("267");
+  await page.getByRole("button", { name: "Select Facade", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeDisabled();
+  await expect(
+    page.getByText("Protected Facade. Unlock it in Structure before editing."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Preview sample change" }).click();
+  const dialog = page.getByRole("dialog", { name: "A quieter roofline" });
+  await expect(dialog).toContainText("pre-authored");
+  await dialog.getByRole("button", { name: "Apply pre-authored variant" }).click();
+  await expect(page.getByTestId("piece-count")).toHaveText("252");
+  await expect(page.getByText("masseria-local-1", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Undo local edit" }).click();
+  await expect(page.getByTestId("piece-count")).toHaveText("267");
+  await expect(page.getByText("masseria-r1", { exact: true }).first()).toBeVisible();
+});
+
+test("FE-005 / FE-008 / FE-013: a blank scene remains coherent across navigation", async ({
+  page,
+}) => {
+  await page.goto("/editor/?project=blank&noWebgl=1");
+  await expect(page.getByTestId("piece-count")).toHaveText("0");
+  await page.getByRole("button", { name: "Add a brick", exact: true }).click();
+  await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
+  await expect(page.getByTestId("piece-count")).toHaveText("1");
+  await page.getByRole("combobox", { name: "Part color", exact: true }).selectOption("teal");
+  await page.getByRole("button", { name: "Move x positive" }).click();
+  await expect(page.getByText("X 1 · Y 0.3 · Z 0", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Remove selected part" }).click();
+  await expect(page.getByTestId("piece-count")).toHaveText("0");
+  await page.getByRole("button", { name: "Undo local edit" }).click();
+  await expect(page.getByTestId("piece-count")).toHaveText("1");
+  await projectNav(page).getByRole("link", { name: "Parts inventory" }).click();
+  await expect(page.getByTestId("inventory-total")).toContainText("1");
+  await expect(page.getByRole("cell", { name: "Deep teal", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search inventory" }).fill("absent-part");
+  await expect(page.getByRole("heading", { name: "No parts match these filters." })).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await projectNav(page).getByRole("link", { name: "Workbench" }).click();
+  await expect(page.getByTestId("piece-count")).toHaveText("1");
+  await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("added-1");
+  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toHaveValue("teal");
+  await expect(page.getByText("X 1 · Y 0.3 · Z 0", { exact: true })).toBeVisible();
+});
+
+test("FE-009: instruction navigation, real drawing zoom and stale revision", async ({ page }) => {
+  await page.goto("/instructions/?project=masseria");
+  await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
+  await page.getByRole("button", { name: "Next step", exact: true }).click();
+  await expect(page.getByText("Step 2 of 5 · Baseline layout")).toBeVisible();
+  const picture = page.getByRole("img", { name: /Instruction step 2: Facade/ });
+  const before = await picture.boundingBox();
+  await page.getByRole("button", { name: "Zoom in instructions" }).click();
+  await expect(page.getByText("125%", { exact: true })).toBeVisible();
+  const after = await picture.boundingBox();
+  expect(after!.width).toBeGreaterThan(before!.width);
+  await projectNav(page).getByRole("link", { name: "Workbench" }).click();
+  await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+  await page.getByRole("button", { name: "Move x positive" }).click();
+  await projectNav(page).getByRole("link", { name: "Instructions", exact: true }).click();
+  await expect(page.getByText(/Instruction sample belongs to the original revision/)).toBeVisible();
+  await expect(page.getByText(/Instruction sample masseria-instructions-r1/)).toBeVisible();
+});
+
+test("FE-012: a stale sample cannot overwrite another local edit", async ({ page }) => {
+  await page.goto("/editor/?project=masseria&noWebgl=1");
+  await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+  await page.getByRole("button", { name: "Move z positive" }).click();
+  await page.getByRole("button", { name: "Preview sample change" }).click();
+  await expect(page.getByRole("alert")).toContainText("Revision conflict");
+  await expect(page.getByRole("button", { name: "Apply pre-authored variant" })).toBeDisabled();
+});
+
+test("FE-003: browser-local references reject unsupported input and show PDF metadata", async ({
+  page,
+}) => {
+  await page.goto("/new/");
+  const picker = page.getByLabel("Choose reference files");
+  await picker.setInputFiles({
+    name: "brief.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("example metadata only"),
+  });
+  await expect(page.getByText("PDF · filename only, not parsed")).toBeVisible();
+  await picker.setInputFiles({
+    name: "untrusted.svg",
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from("<svg/>"),
+  });
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Other file types are not supported" }),
+  ).toBeVisible();
+  await expect(page.getByText("brief.pdf")).toBeVisible();
+  await page.getByRole("button", { name: "Remove brief.pdf" }).click();
+  await expect(page.getByText("brief.pdf")).toHaveCount(0);
+  await picker.setInputFiles({
+    name: "tiny.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await expect(page.getByRole("img", { name: "tiny.png", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Remove tiny.png" }).click();
+  await expect(page.getByRole("img", { name: "tiny.png", exact: true })).toHaveCount(0);
+});
+
+test("FE-001 / FE-019: static direct routes, unknown query and WebGL fallback", async ({
+  page,
+}) => {
+  await page.goto("/editor/?project=unregistered&noWebgl=1");
+  await expect(page.getByText("Unknown project. Showing the courtyard sample.")).toBeVisible();
+  await expect(page.getByText(/WebGL is unavailable/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry interactive 3D" })).toBeVisible();
+  await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
+  await page.reload();
+  await expect(page.getByTestId("piece-count")).toHaveText("267");
+  await page.goto("/inventory/?project=rover");
+  await expect(page.getByTestId("inventory-total")).toContainText("56");
+  await page.reload();
+  await expect(page.getByTestId("inventory-total")).toContainText("56");
+});
+
+test("FE-019: a missing static poster leaves an honest accessible fallback", async ({ page }) => {
+  await page.route("**/assets/previews/*.svg", (route) => route.abort());
+  await page.goto("/");
+  await expect(
+    page.getByText("Preview unavailable. Model controls remain available.").first(),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Start from scratch", exact: true })).toBeVisible();
+});
+
+test("FE-014 / FE-015 / FE-016: example review and digital listing remain truthful", async ({
+  page,
+}) => {
+  await page.goto("/community/");
+  await page.getByRole("button", { name: "View revision-specific review" }).click();
+  const review = page.getByRole("dialog", { name: "The courtyard house" });
+  await expect(review).toContainText("Anchored to masseria-r1");
+  await review
+    .getByRole("textbox", { name: "Unsent local comment draft" })
+    .fill("Consider a lower terrace.");
+  await expect(review).toContainText("No message is sent");
+  await review.getByRole("link", { name: "Focus sample object" }).click();
+  await expect(page.getByRole("combobox", { name: "Choose a logical part" })).toHaveValue(
+    "roof-0-0",
+  );
+  await page.goto("/marketplace/");
+  await page.getByRole("button", { name: "View example" }).first().click();
+  const listing = page.getByRole("dialog", { name: "The courtyard house" });
+  await expect(listing).toContainText("Checkout and purchases are outside this POC");
+  await expect(listing).toContainText(
+    "No physical parts, payment, protected download or purchase is provided",
+  );
+  await expect(listing).toContainText("267 logical pieces");
+  await expect(listing.getByRole("button", { name: /buy|pay|purchase/i })).toHaveCount(0);
+  await listing.getByRole("link", { name: "View instruction example" }).click();
+  await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
+});
+
+test("FE-020: production journeys need only same-origin static requests", async ({
+  page,
+  baseURL,
+}) => {
+  const external: string[] = [];
+  const errors: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (!["data:", "blob:"].includes(url.protocol) && url.origin !== new URL(baseURL!).origin)
+      external.push(url.href);
+  });
+  page.on("pageerror", (error) => errors.push(error.message));
+  for (const path of [
+    "/",
+    "/new/",
+    "/community/",
+    "/marketplace/",
+    "/plans/",
+    "/design-system/",
+    "/inventory/?project=creature",
+    "/instructions/?project=creature",
+    "/editor/?project=creature&noWebgl=1",
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole("main")).toBeVisible();
+  }
+  expect(external).toEqual([]);
+  expect(errors).toEqual([]);
+});

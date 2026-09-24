@@ -1,36 +1,23 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BRIKUMA frontend
 
-## Getting Started
+A static, browser-local creative workbench for brick models. The POC includes a workspace, free-form brief, model editor, instruction and inventory views, community examples, digital listing previews, provisional plans and a component review page. Fixture authors/reviews/listings are fictional. There is no backend, cloud save, AI provider, checkout or physical validation.
 
-First, run the development server:
+Read [frontend documentation](docs/README.md), [global documentation](../docs/README.md), [agent instructions](AGENTS.md), [Claude adapter](CLAUDE.md), [vocabulary](LEGEND.md), [contributing](CONTRIBUTING.md), [changes](CHANGELOG.md), [security](SECURITY.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-```bash
+## Local development
+
+Run commands from this directory using the exact Node/npm versions recorded in [dependency evidence](docs/engineering/DEPENDENCIES.md) and repository configuration:
+
+```sh
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run check
+npm run build
+npm run preview
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The static build outputs `out/`. The preview command serves exported files; no application server is needed at runtime. See the manifest for available scripts and [quality](docs/engineering/QUALITY.md) for their required behavior. Installation is not considered verified until acceptance records its actual result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Routes: `/`, `/new`, `/editor`, `/instructions`, `/inventory`, `/community`, `/marketplace`, `/plans`, `/design-system`. Project selection uses allowlisted query values. Full reload resets in-memory edits; changes survive client navigation during the session.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[Acceptance](docs/delivery/ACCEPTANCE.md) distinguishes executed checks from pending/unavailable checks. [Handoff](docs/ai/HANDOFF.md) records current limitations. Approved remote URLs are not available; submodule registration remains blocked. BRIKUMA is not affiliated with or certified by LEGO.
