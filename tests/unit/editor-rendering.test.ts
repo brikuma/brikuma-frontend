@@ -10,7 +10,11 @@ import {
   Raycaster,
   Vector3,
 } from "three";
-import { convertedProjection, modelBounds } from "../../src/features/editor/scene/scene-camera";
+import {
+  calculateCameraFit,
+  convertedProjection,
+  modelBounds,
+} from "../../src/features/editor/scene/scene-camera";
 import {
   clippedInstanceRaycast,
   instancePartId,
@@ -75,6 +79,39 @@ describe("Specialist rendering contracts", () => {
     const orthographic = convertedProjection(perspective, "orthographic", target, 800, 600);
     expect(orthographic).toBeInstanceOf(OrthographicCamera);
     expect(orthographic.zoom).toBeCloseTo(20, 8);
+  });
+
+  it.each([
+    { width: 842, height: 410, bottom: 80, mode: "build" as const },
+    { width: 390, height: 350, bottom: 112, mode: "build" as const },
+    { width: 390, height: 350, bottom: 112, mode: "present" as const },
+  ])(
+    "fit keeps tall layers between floating controls at $width px in $mode",
+    ({ width, height, bottom, mode }) => {
+      const fit = calculateCameraFit({ x: 4, y: 12 }, { width, height }, { mode });
+      const camera = new OrthographicCamera(-width / 2, width / 2, height / 2, -height / 2);
+      camera.zoom = fit.zoom;
+      camera.position.set(0, fit.targetOffsetY, 20);
+      camera.lookAt(0, fit.targetOffsetY, 0);
+      camera.updateProjectionMatrix();
+      camera.updateMatrixWorld();
+      const screenY = (y: number) => ((1 - new Vector3(0, y, 0).project(camera).y) * height) / 2;
+      const topEdge = screenY(6);
+      const bottomEdge = screenY(-6);
+      expect(topEdge).toBeGreaterThanOrEqual(104);
+      expect(bottomEdge).toBeLessThanOrEqual(height - bottom);
+      // A fit still uses almost all of the available height instead of applying a fixed zoom-out.
+      expect(bottomEdge - topEdge).toBeCloseTo((height - 104 - bottom) * 0.96);
+    },
+  );
+
+  it("fit preserves full-width framing and remains finite on very short canvases", () => {
+    const size = { width: 842, height: 410 };
+    const wide = calculateCameraFit({ x: 60, y: 2 }, size);
+    expect(wide.zoom * 60).toBeCloseTo(size.width * 0.93);
+    const short = calculateCameraFit({ x: 4, y: 12 }, { width: 320, height: 120 });
+    expect(short.zoom).toBeGreaterThan(0);
+    expect(Number.isFinite(short.targetOffsetY)).toBe(true);
   });
 
   it("EDT-012: repacked body and stud slots resolve current stable IDs", () => {

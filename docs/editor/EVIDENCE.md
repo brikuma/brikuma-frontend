@@ -1,5 +1,9 @@
 # Editor execution evidence
 
+The latest general-purpose workspace, expanded catalog, local instruction drafts and layer separation are recorded in [acceptance](../delivery/ACCEPTANCE.md#general-purpose-workspace-follow-up--2026-09-24). Its executed results supersede the historical counts below for this working tree.
+
+The later manual-building corrections and their final 396-test/52-browser-case verification are recorded in [acceptance](../delivery/ACCEPTANCE.md#manual-building-ux-corrections--2026-09-24). The historical runs below predate the added door/slope profiles, attachment inventory and compact-panel fixes.
+
 Owner: frontend. Specialist brief 1.0.0 and subsequent editor UX follow-up, 2026-09-24. See the [requirement register](README.md), [quality gates](../engineering/QUALITY.md) and [scope limits](RENDERING.md).
 
 ## Discovery and selection follow-up

@@ -13,16 +13,16 @@ afterEach(cleanup);
 const addButtons = () => screen.queryAllByRole("button", { name: /^Add / });
 
 describe("Editor part discovery", () => {
-  it("finds original IDs, normalized dimensions and category terms with visible identity", async () => {
+  it("finds original IDs and dimensions without exposing technical IDs on every card", async () => {
     const user = userEvent.setup();
     render(<PartCatalog onAdd={vi.fn()} />);
     const search = screen.getByRole("textbox", { name: "Search part catalog" });
     await user.type(search, "  DEMO-BRICK-2X4  ");
     expect(addButtons()).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Add Brick 2 × 4" })).toHaveAccessibleDescription(
-      "ID: demo-brick-2x4",
+    expect(screen.getByRole("button", { name: "Add Brick 2 × 4" })).toHaveTextContent(
+      "3.2 × 1.6 × 0.96 cm",
     );
-    expect(screen.getByText("ID: demo-brick-2x4")).toBeVisible();
+    expect(screen.queryByText("ID: demo-brick-2x4")).not.toBeInTheDocument();
     await user.clear(search);
     await user.type(search, " smooth 2 x 4 ");
     expect(addButtons()).toHaveLength(1);
@@ -42,7 +42,7 @@ describe("Editor part discovery", () => {
       expect(addButtons().length).toBeGreaterThan(0);
     }
     await user.selectOptions(category, "tile");
-    expect(addButtons()).toHaveLength(5);
+    expect(addButtons()).toHaveLength(8);
     expect(screen.getByRole("button", { name: "Add Smooth tile 2 × 2" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Add Plate 2 × 2" })).not.toBeInTheDocument();
     expect(
@@ -62,7 +62,11 @@ describe("Editor part discovery", () => {
         usedPartIds={["demo-tile-2x2", "demo-brick-2x4"]}
       />,
     );
+    if (!screen.getByText("More filters").closest("details")?.open)
+      await user.click(screen.getByText("More filters"));
     await user.click(screen.getByRole("button", { name: "Favorites" }));
+    if (!screen.getByText("More filters").closest("details")?.open)
+      await user.click(screen.getByText("More filters"));
     await user.click(screen.getByRole("checkbox", { name: "Currently used" }));
     await user.selectOptions(screen.getByRole("combobox", { name: "Part category" }), "tile");
     expect(addButtons()).toHaveLength(1);
@@ -124,6 +128,8 @@ describe("Editor part discovery", () => {
     expect(onFavoriteChange).not.toHaveBeenCalled();
     expect(usedPartIds).toEqual(["demo-plate-2x2"]);
     expect(recentPartIds).toEqual([]);
+    if (!screen.getByText("More filters").closest("details")?.open)
+      await user.click(screen.getByText("More filters"));
     await user.click(screen.getByRole("button", { name: "Recent" }));
     expect(addButtons()).toHaveLength(0);
     expect(screen.getByText("Committed additions in this session, newest first.")).toBeVisible();
@@ -161,6 +167,8 @@ describe("Editor part discovery", () => {
         onFavoriteChange={onFavoriteChange}
       />,
     );
+    if (!screen.getByText("More filters").closest("details")?.open)
+      await user.click(screen.getByText("More filters"));
     await user.click(screen.getByRole("button", { name: "Favorites" }));
     expect(onPreferencesChange).toHaveBeenCalledWith({ ...preferences, collection: "favorites" });
     expect(screen.getByRole("button", { name: "All parts" })).toHaveAttribute(
@@ -176,15 +184,40 @@ describe("Editor part discovery", () => {
     rerender(
       <PartCatalog onAdd={vi.fn()} preferences={{ ...preferences, search: "demo-slope-1x1" }} />,
     );
-    expect(screen.getByText("Connector placement unavailable")).toBeVisible();
-    expect(screen.getByText("Volume check unavailable")).toBeVisible();
+    expect(screen.getByText("Visual detail")).toBeVisible();
+    expect(screen.queryByText("Volume check unavailable")).not.toBeInTheDocument();
+    await user.click(screen.getByText("More colors"));
     expect(
       screen.getByText("Demo colors; manufactured color availability is unknown."),
     ).toBeVisible();
     rerender(
       <PartCatalog onAdd={vi.fn()} preferences={{ ...preferences, search: "demo-brick-2x4" }} />,
     );
-    expect(screen.getByText("Stud mount")).toBeVisible();
-    expect(screen.getByText("Volume check supported")).toBeVisible();
+    expect(screen.getByText("Connect supported")).toBeVisible();
+    expect(screen.queryByText("Volume check supported")).not.toBeInTheDocument();
+  });
+
+  it("filters out visual-only details while retaining supported receiving parts", async () => {
+    const user = userEvent.setup();
+    render(<PartCatalog onAdd={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Add Tower door leaf" })).toHaveTextContent(
+      "Visual detail",
+    );
+    expect(screen.getByRole("button", { name: "Add Stone gate surround" })).toHaveTextContent(
+      "Visual detail",
+    );
+    if (!screen.getByText("More filters").closest("details")?.open)
+      await user.click(screen.getByText("More filters"));
+    await user.click(screen.getByRole("checkbox", { name: "Connectable parts only" }));
+    expect(screen.queryByRole("button", { name: "Add Tower door leaf" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Add Stone gate surround" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Brick 2 × 4" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add Smooth tile 2 × 2" })).toBeVisible();
+    await user.type(screen.getByRole("textbox", { name: "Search part catalog" }), "door");
+    expect(screen.getByRole("button", { name: "Add Door with frame 1 × 2 × 4" })).toHaveTextContent(
+      "1.6 × 0.8 × 3.84 cm",
+    );
   });
 });

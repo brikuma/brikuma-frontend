@@ -35,6 +35,11 @@ beforeEach(() => {
   });
 });
 afterEach(cleanup);
+async function expand(user: ReturnType<typeof userEvent.setup>, label: string) {
+  const summary = screen.queryByText(label, { exact: true });
+  if (summary && !summary.closest("details")?.open) await user.click(summary);
+}
+
 function open() {
   render(
     <SessionProvider>
@@ -49,7 +54,9 @@ describe("Editor command and inspector integration", () => {
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
+    await expand(user, "Advanced placement");
     await user.click(screen.getByRole("button", { name: "Place brick" }));
+    await expand(user, "Advanced position");
     await user.click(screen.getByRole("button", { name: "Duplicate" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent(/^2$/);
     const workspace = screen.getByRole("region", { name: "Modeling workspace" });
@@ -76,6 +83,7 @@ describe("Editor command and inspector integration", () => {
     const user = userEvent.setup();
     await open();
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
+    await expand(user, "Advanced placement");
     const workspace = screen.getByRole("region", { name: "Modeling workspace" });
     fireEvent.keyDown(workspace, { key: "r" });
     expect(screen.getByTestId("viewport-rotation")).toHaveTextContent("90");
@@ -84,11 +92,16 @@ describe("Editor command and inspector integration", () => {
     expect(screen.getByRole("region", { name: "Pending brick placement" })).toBeVisible();
     expect(screen.getByTestId("piece-count")).toHaveTextContent(/^0$/);
     fireEvent.keyDown(workspace, { key: "Escape" });
+    await expand(user, "More filters");
     await user.click(screen.getByRole("button", { name: "Recent" }));
     expect(screen.queryByRole("button", { name: "Add Brick 2 × 4" })).not.toBeInTheDocument();
+    await expand(user, "More filters");
     await user.click(screen.getByRole("button", { name: "All parts" }));
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
+    await expand(user, "Advanced placement");
     await user.click(screen.getByRole("button", { name: "Place brick" }));
+    await expand(user, "Advanced position");
+    await expand(user, "More filters");
     await user.click(screen.getByRole("button", { name: "Recent" }));
     expect(screen.getByRole("button", { name: "Add Brick 2 × 4" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Structure" }));
@@ -99,6 +112,7 @@ describe("Editor command and inspector integration", () => {
   it("selects and frames diagnostic IDs, preserves reports across panels, and blocks stale drill-in", async () => {
     const user = userEvent.setup();
     await open();
+    await expand(user, "Project tools");
     await user.click(screen.getByRole("button", { name: "Local project files" }));
     const dialog = screen.getByRole("dialog", { name: "Local project files" });
     await user.selectOptions(
@@ -116,11 +130,17 @@ describe("Editor command and inspector integration", () => {
     expect(screen.getByLabelText("Selection summary")).toHaveTextContent("2 pieces");
     await user.click(screen.getByRole("button", { name: "Restore view" }));
     expect(screen.getByRole("button", { name: "Show hidden parts (1)" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Build" }));
+    await expand(user, "Project tools");
+    await user.click(
+      within(screen.getByText("Project tools").closest("details")!).getByRole("button", {
+        name: "Build",
+      }),
+    );
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Choose a logical part" }),
       "lab-conflict",
     );
+    await expand(user, "Advanced position");
     await user.click(screen.getByRole("button", { name: "Move x positive" }));
     await user.click(screen.getByRole("button", { name: "Checks" }));
     expect(screen.getByText(/Stale: model revision changed/)).toBeVisible();

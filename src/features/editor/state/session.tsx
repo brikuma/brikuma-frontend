@@ -19,6 +19,8 @@ import {
   type EditCommand,
   type ModelSession,
   type Model,
+  generateBuildPlan,
+  type DraftBuildPlan,
 } from "@/core/model/public";
 import { editPolicy } from "@/fixtures/catalog";
 import { loadScene } from "@/fixtures/load-scene";
@@ -29,13 +31,22 @@ import {
   useProjectContext,
 } from "@/features/project-brief/project-context";
 
-type Entry = { session: ModelSession; fixture: SceneFixture };
+export interface DraftInstructions {
+  readonly plan: DraftBuildPlan;
+  readonly sourceModel: Model;
+}
+type Entry = {
+  session: ModelSession;
+  fixture: SceneFixture;
+  draftInstructions?: DraftInstructions;
+};
 type State = Partial<Record<ProjectId, Entry>>;
 type Action =
   | { type: "loaded"; id: ProjectId; fixture: SceneFixture }
   | { type: "update"; id: ProjectId; session: ModelSession }
   | { type: "reset"; id: ProjectId }
-  | { type: "replace"; id: ProjectId; fixture: SceneFixture };
+  | { type: "replace"; id: ProjectId; fixture: SceneFixture }
+  | { type: "instructions"; id: ProjectId; draft: DraftInstructions };
 function reducer(state: State, action: Action): State {
   if (action.type === "loaded")
     return state[action.id]
@@ -51,6 +62,8 @@ function reducer(state: State, action: Action): State {
     };
   const entry = state[action.id];
   if (!entry) return state;
+  if (action.type === "instructions")
+    return { ...state, [action.id]: { ...entry, draftInstructions: action.draft } };
   return {
     ...state,
     [action.id]: {
@@ -128,6 +141,24 @@ export function useProject() {
     model: entry?.session.present,
     message,
     loadError,
+    draftInstructions: entry?.draftInstructions,
+    generateInstructions: () => {
+      if (!entry) return false;
+      const result = generateBuildPlan(entry.session.present, editPolicy.parts);
+      if (!result.ok) {
+        setMessage(result.error.message);
+        return false;
+      }
+      dispatch({
+        type: "instructions",
+        id,
+        draft: { plan: result.value, sourceModel: entry.session.present },
+      });
+      setMessage(
+        `Generated ${result.value.steps.length} local instruction steps for this model revision.`,
+      );
+      return true;
+    },
     hasContext,
     command,
     history,

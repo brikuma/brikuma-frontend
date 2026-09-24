@@ -17,7 +17,7 @@ export interface InstructionSample {
   readonly steps: readonly InstructionStep[];
 }
 
-export type AssemblyViewMode = "roof" | "modules";
+export type AssemblyViewMode = "roof" | "modules" | "layers";
 
 export interface AssemblyOffset {
   readonly x: number;

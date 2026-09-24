@@ -1,6 +1,7 @@
 import counts from "../../src/fixtures/scene-counts.json";
 import { chromium, expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { openDetails, openInspector } from "./editor-controls";
 
 test("FE-019: responsive editor, reduced motion and screenshot matrix", async ({ page }) => {
   await mkdir("artifacts/screenshots", { recursive: true });
@@ -34,14 +35,14 @@ test("FE-019: responsive editor, reduced motion and screenshot matrix", async ({
     });
     if (width < 1024) {
       await page.getByRole("button", { name: "Parts & structure", exact: true }).click();
-      const dialog = page.getByRole("dialog", {
-        name: "Parts & structure",
+      const panel = page.getByRole("complementary", {
+        name: "Parts and structure",
         exact: true,
       });
-      await dialog.getByRole("button", { name: "Structure", exact: true }).click();
-      await expect(dialog.getByRole("button", { name: "Select Roof" })).toBeVisible();
+      await panel.getByRole("button", { name: "Structure", exact: true }).click();
+      await expect(panel.getByRole("button", { name: "Select Roof" })).toBeVisible();
       await page.keyboard.press("Escape");
-      await expect(dialog).toHaveCount(0);
+      await expect(panel).toHaveCount(0);
       await expect(
         page.getByRole("button", { name: "Parts & structure", exact: true }),
       ).toBeFocused();
@@ -63,9 +64,7 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
     page.getByRole("heading", { name: "The courtyard house", exact: true, level: 1 }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
-  await expect(
-    page.getByText("Right drag orbit · middle drag pan · scroll zoom · click selects"),
-  ).toBeVisible({
+  await expect(page.getByTestId("model-viewport")).toHaveAttribute("data-scene-ready", "true", {
     timeout: 20000,
   });
   await page.screenshot({
@@ -73,6 +72,7 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
     fullPage: true,
     animations: "disabled",
   });
+  await openDetails(page, "View tools");
   for (const quality of ["standard", "low", "studio"]) {
     await page.getByRole("combobox", { name: "Render quality", exact: true }).selectOption(quality);
     await expect(page.locator("canvas")).toBeVisible();
@@ -85,7 +85,7 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
     });
   }
   await page.getByRole("button", { name: "Show workspace grid", exact: true }).click();
-  await page.getByRole("button", { name: "Top view", exact: true }).click();
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
   await page.getByRole("button", { name: "Show dimensions", exact: true }).click();
   await expect(page.getByRole("button", { name: "Show dimensions", exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -93,22 +93,25 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
   );
   await page.getByRole("button", { name: "Show dimensions", exact: true }).click();
   await page.getByRole("button", { name: "Show workspace grid", exact: true }).click();
-  await page.getByRole("button", { name: "Reset camera", exact: true }).click();
+  await page.getByRole("button", { name: "Fit model to view", exact: true }).click();
   await page.getByRole("button", { name: "Structure", exact: true }).click();
   await page.getByRole("button", { name: "Select Roof" }).click();
+  await openInspector(page);
   await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
   await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Zoom in model" }).click();
-  await page.getByRole("button", { name: "Reset camera" }).click();
+  await page.getByRole("button", { name: "Fit model to view" }).click();
   await page.screenshot({
     path: "artifacts/screenshots/editor-3d-1440x900.png",
     fullPage: true,
     animations: "disabled",
   });
+  await openDetails(page, "View tools");
   await page.getByRole("button", { name: "Roof access", exact: true }).click();
   await expect(page.getByRole("slider", { name: "Assembly separation" })).toHaveValue("100");
   await expect(page.getByRole("button", { name: "Show dimensions" })).toBeDisabled();
   await page.screenshot({ path: "artifacts/screenshots/editor-roof-access.png", fullPage: true });
+  await openDetails(page, "Project tools");
   await page.getByRole("button", { name: "Focus canvas", exact: true }).click();
   await expect(page.locator("canvas")).toHaveJSProperty("clientWidth", 1440);
   await page.evaluate(
@@ -118,9 +121,10 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
       ),
   );
   await page.screenshot({ path: "artifacts/screenshots/editor-focus-roof.png", fullPage: true });
+  await openDetails(page, "Project tools");
   await page.getByRole("button", { name: "Focus canvas", exact: true }).click();
-  await page.getByRole("button", { name: "Exploded view", exact: true }).click();
-  await expect(page.getByLabel("Assembly separation controls")).toContainText("Entrance facade");
+  await page.getByRole("combobox", { name: "Disassembly method" }).selectOption("modules");
+  await expect(page.getByRole("combobox", { name: "Disassembly method" })).toHaveValue("modules");
   await page.getByRole("slider", { name: "Assembly separation" }).fill("100");
   await page.evaluate(
     () =>
@@ -155,7 +159,7 @@ test("FE-019: mobile starts as a deliberate viewer with accessible inspector", a
     animations: "disabled",
   });
   await page.getByRole("button", { name: "Inspector", exact: true }).click();
-  const inspector = page.getByRole("dialog", { name: "Project inspector" });
+  const inspector = page.getByRole("complementary", { name: "Project inspector" });
   await inspector.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
   await expect(inspector.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
   await page.keyboard.press("Escape");
@@ -167,24 +171,19 @@ test("Studio: canvas dragging commits once and pointer cancellation leaves the m
 }) => {
   await page.goto("/editor/?project=blank");
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
-  await page.getByRole("button", { name: "Front view", exact: true }).click();
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("front");
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Isometric view", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(page.getByRole("button", { name: "Front view", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Right view", exact: true })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Camera view", exact: true })).toHaveValue("iso");
+  await expect(page.getByRole("option", { name: "Front view", exact: true })).toBeDisabled();
+  await expect(page.getByRole("option", { name: "Right view", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
-  await page.getByRole("button", { name: "Right view", exact: true }).click();
+  await openDetails(page, "Advanced position");
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("right");
   await page.getByRole("button", { name: "Move tool", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Isometric view", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(page.getByRole("button", { name: "Front view", exact: true })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Right view", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "Top view", exact: true }).click();
+  await expect(page.getByRole("combobox", { name: "Camera view", exact: true })).toHaveValue("iso");
+  await expect(page.getByRole("option", { name: "Front view", exact: true })).toBeDisabled();
+  await expect(page.getByRole("option", { name: "Right view", exact: true })).toBeDisabled();
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
   await page.getByRole("button", { name: "Move tool", exact: true }).click();
   const canvas = page.locator("canvas");
   const box = (await canvas.boundingBox())!;
@@ -248,25 +247,27 @@ test("Studio: surface placement aligns a single brick to the support connectors"
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
-  await page.getByRole("button", { name: "Top view", exact: true }).click();
+  await openDetails(page, "Advanced position");
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
   await page.getByRole("button", { name: "Add Brick 1 × 1", exact: true }).click();
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByRole("button", { name: "Attach to model", exact: true }).click();
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2 + 4, box.y + box.height / 2 + 4);
   await expect(page.getByText("1 stud aligned · click to attach").first()).toBeVisible();
   await page.screenshot({ path: "artifacts/screenshots/brick-connector-preview.png" });
   await page.mouse.click(box.x + box.width / 2 + 4, box.y + box.height / 2 + 4);
   await expect(page.getByTestId("piece-count")).toHaveText("2");
+  await openDetails(page, "Advanced position");
   await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).toHaveValue(
-    "0.5",
+    "0.4",
   );
   await expect(page.getByRole("spinbutton", { name: "Position Z", exact: true })).toHaveValue(
-    "0.5",
+    "0.4",
   );
   await expect(page.getByRole("spinbutton", { name: "Position Y", exact: true })).toHaveValue(
-    "1.8",
+    "1.44",
   );
-  await page.getByRole("button", { name: "Isometric view", exact: true }).click();
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("iso");
   await page.screenshot({ path: "artifacts/screenshots/brick-surface-connection.png" });
   await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("1");
@@ -279,6 +280,8 @@ test("Studio: brick inspection exposes the underside without changing the assemb
   await expect(page.locator("canvas")).toBeVisible({ timeout: 20000 });
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
+  await openDetails(page, "Advanced position");
+  await openDetails(page, "View tools");
   await page.getByRole("button", { name: "Inspect selected brick", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Inspect selected brick", exact: true }),
@@ -286,6 +289,10 @@ test("Studio: brick inspection exposes the underside without changing the assemb
   await expect(page.locator("canvas")).toHaveCount(1);
   await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.screenshot({ path: "artifacts/screenshots/brick-inspection-top.png" });
+  await page
+    .locator("summary")
+    .filter({ hasText: /^View tools$/ })
+    .click();
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.6);
   await page.mouse.down({ button: "right" });
@@ -293,7 +300,7 @@ test("Studio: brick inspection exposes the underside without changing the assemb
   await page.mouse.up({ button: "right" });
   await page.screenshot({ path: "artifacts/screenshots/brick-inspection-underside.png" });
   await page.setViewportSize({ width: 320, height: 568 });
-  await page.getByRole("button", { name: "Reset camera", exact: true }).click();
+  await page.getByRole("button", { name: "Fit model to view", exact: true }).click();
   await page.evaluate(() => window.scrollTo(0, 0));
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
@@ -303,6 +310,7 @@ test("Studio: brick inspection exposes the underside without changing the assemb
     fullPage: true,
   });
   await page.getByRole("button", { name: "Exit brick inspection", exact: true }).click();
+  await openDetails(page, "View tools");
   await expect(
     page.getByRole("button", { name: "Inspect selected brick", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
@@ -358,6 +366,7 @@ test("FE-019: a browser with WebGL disabled preserves the full fallback", async 
     await expect(page.getByRole("button", { name: "Retry interactive 3D" })).toBeVisible();
     await page.getByRole("button", { name: "Structure", exact: true }).click();
     await page.getByRole("button", { name: "Select Roof", exact: true }).click();
+    await openInspector(page);
     await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
     await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
     await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));

@@ -52,6 +52,7 @@ export interface ModelViewportProps {
   onMetrics?: (metrics: RendererMetrics) => void;
   hidden: readonly string[];
   placement?: PlacementPreview | null;
+  awaitingNextPosition?: boolean;
   onPlacementChange?: (transform: GridTransform) => void;
   onPlace?: (transform: GridTransform) => boolean;
   onCancelPlacement?: () => void;

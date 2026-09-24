@@ -1,8 +1,9 @@
 "use client";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { Plus, Search, Box, Star } from "lucide-react";
 import {
   getPartConnections,
+  formatCentimeters,
   hasSupportedDiagnosticGeometry,
   type PartDefinition,
 } from "@/core/model/public";
@@ -16,7 +17,7 @@ const categories = [
   { id: "tile", label: "Tiles", terms: "tiles smooth" },
   { id: "slope", label: "Roof pieces", terms: "roof roofing slopes" },
   { id: "cylinder", label: "Round & pots", terms: "round pots cylinders planters" },
-  { id: "architecture", label: "Arches", terms: "arch arches architecture" },
+  { id: "architecture", label: "Doors & arches", terms: "arch arches architecture" },
   { id: "nature", label: "Plants", terms: "plants nature leaves branches" },
 ] as const;
 type PartCategory = (typeof categories)[number]["id"];
@@ -25,12 +26,14 @@ export interface PartCatalogPreferences {
   readonly category: "all" | PartCategory;
   readonly collection: "all" | "favorites" | "recent";
   readonly usedOnly: boolean;
+  readonly connectableOnly?: boolean;
 }
 const defaultPreferences: PartCatalogPreferences = {
   search: "",
   category: "all",
   collection: "all",
   usedOnly: false,
+  connectableOnly: false,
 };
 
 function belongsToCategory(part: PartDefinition, category: PartCategory): boolean {
@@ -46,7 +49,7 @@ function belongsToCategory(part: PartDefinition, category: PartCategory): boolea
     case "cylinder":
       return ["cylinder", "planter"].includes(part.shape);
     case "architecture":
-      return ["arch", "arch-panel", "arch-spandrel"].includes(part.shape);
+      return ["arch", "arch-panel", "arch-spandrel", "door-assembly"].includes(part.shape);
     case "nature":
       return (
         ["leaf", "leaf-upright", "branch"].includes(part.shape) ||
@@ -67,14 +70,16 @@ function normalizeSearch(value: string): string {
 }
 const catalog = partDefinitions.map((part) => {
   const tags = categories.filter((category) => belongsToCategory(part, category.id));
+  const diagnosticSupported = hasSupportedDiagnosticGeometry(part);
+  const connectable = diagnosticSupported && getPartConnections(part).receivers.length > 0;
   return {
     part,
     categories: tags.map((category) => category.id),
     search: normalizeSearch(
       [part.name, part.id, part.shape, ...tags.map((category) => category.terms)].join(" "),
     ),
-    connections: getPartConnections(part),
-    diagnosticSupported: hasSupportedDiagnosticGeometry(part),
+    connectable,
+    diagnosticSupported,
   };
 });
 const availableCategories = categories.filter((category) =>
@@ -105,7 +110,6 @@ export function PartCatalog({
   preferences?: PartCatalogPreferences;
   onPreferencesChange?: (preferences: PartCatalogPreferences) => void;
 }) {
-  const descriptionId = useId();
   const [localPreferences, setLocalPreferences] = useState(defaultPreferences);
   const [localFavorites, setLocalFavorites] = useState<readonly string[]>([]);
   const [localColor, setLocalColor] = useState("limestone");
@@ -138,6 +142,7 @@ export function PartCatalog({
       terms.every((term) => item.search.includes(term)) &&
       (filters.category === "all" || item.categories.includes(filters.category)) &&
       (!filters.usedOnly || used.has(item.part.id)) &&
+      (!filters.connectableOnly || item.connectable) &&
       (filters.collection === "all" ||
         (filters.collection === "favorites"
           ? favorite.has(item.part.id)
@@ -162,32 +167,6 @@ export function PartCatalog({
           onChange={(e) => changeFilters({ search: e.target.value })}
         />
       </label>
-      <div className="grid grid-cols-3 gap-1" role="group" aria-label="Catalog collection">
-        {(["all", "favorites", "recent"] as const).map((collection) => (
-          <button
-            key={collection}
-            type="button"
-            className="button min-h-10 px-1 text-xs aria-pressed:border-primary aria-pressed:bg-primary-muted"
-            aria-pressed={filters.collection === collection}
-            onClick={() => changeFilters({ collection })}
-          >
-            {{ all: "All parts", favorites: "Favorites", recent: "Recent" }[collection]}
-          </button>
-        ))}
-      </div>
-      <label className="flex min-h-10 items-center gap-2 text-xs">
-        <input
-          type="checkbox"
-          checked={filters.usedOnly}
-          onChange={(event) => changeFilters({ usedOnly: event.target.checked })}
-        />
-        Currently used
-      </label>
-      {filters.collection === "recent" && (
-        <p className="text-xs text-muted-foreground">
-          Committed additions in this session, newest first.
-        </p>
-      )}
       <div className="grid grid-cols-2 gap-1.5">
         <label className="min-w-0 space-y-1">
           <span className="block text-xs text-muted-foreground">Category</span>
@@ -223,18 +202,64 @@ export function PartCatalog({
           </select>
         </label>
       </div>
-      <ColorPalette colorId={color} onChange={changeColor} label="New brick color" />
-      <p className="text-xs text-muted-foreground">
-        Demo colors; manufactured color availability is unknown.
-      </p>
+      <div className="flex flex-wrap gap-x-3 text-xs">
+        <details className="min-w-0 flex-1 open:basis-full">
+          <summary className="cursor-pointer py-2">More filters</summary>
+          <label className="flex min-h-10 items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={filters.connectableOnly ?? false}
+              onChange={(event) => changeFilters({ connectableOnly: event.target.checked })}
+            />
+            Connectable parts only
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Connect uses supported underside sockets and overlap checks. Visual details have no
+            supported attachment.
+          </p>
+          <div className="grid grid-cols-3 gap-1" role="group" aria-label="Catalog collection">
+            {(["all", "favorites", "recent"] as const).map((collection) => (
+              <button
+                key={collection}
+                type="button"
+                className="button min-h-10 px-1 text-xs aria-pressed:border-primary aria-pressed:bg-primary-muted"
+                aria-pressed={filters.collection === collection}
+                onClick={() => changeFilters({ collection })}
+              >
+                {{ all: "All parts", favorites: "Favorites", recent: "Recent" }[collection]}
+              </button>
+            ))}
+          </div>
+          <label className="flex min-h-10 items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={filters.usedOnly}
+              onChange={(event) => changeFilters({ usedOnly: event.target.checked })}
+            />
+            Currently used
+          </label>
+          {filters.collection === "recent" && (
+            <p className="text-xs text-muted-foreground">
+              Committed additions in this session, newest first.
+            </p>
+          )}
+        </details>
+        <details className="min-w-0 flex-1 open:basis-full">
+          <summary className="cursor-pointer py-2">More colors</summary>
+          <ColorPalette colorId={color} onChange={changeColor} label="New brick color" />
+          <p className="text-xs text-muted-foreground">
+            Demo colors; manufactured color availability is unknown.
+          </p>
+        </details>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-1 border-t pt-3 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">
           {filtered.length} {filtered.length === 1 ? "part" : "parts"}
         </span>
-        <span>W × D × H · studs</span>
+        <span>W × D × H · cm</span>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        {filtered.map(({ part, connections, diagnosticSupported }) => (
+        {filtered.map(({ part, connectable }) => (
           <div key={part.id} className="relative min-w-0">
             <button
               type="button"
@@ -242,7 +267,6 @@ export function PartCatalog({
               className="part-catalog-card group h-full w-full"
               aria-label={`Add ${part.name}`}
               aria-pressed={selectedPartId === part.id}
-              aria-describedby={`${descriptionId}-${part.id}`}
             >
               <span className="relative mb-2 flex h-[76px] items-center justify-center rounded-sm bg-background">
                 <PartPreview part={part} color={selectedColor.hex} />
@@ -251,20 +275,12 @@ export function PartCatalog({
                 </span>
               </span>
               <span className="block text-xs font-medium leading-snug">{part.name}</span>
-              <span
-                id={`${descriptionId}-${part.id}`}
-                className="mt-1 block break-all font-mono text-xs text-muted-foreground"
-              >
-                ID: {part.id}
-              </span>
               <span className="mt-1 block text-xs tabular-nums text-muted-foreground">
-                {part.width} × {part.depth} × {part.height}
+                {formatCentimeters(part.width)} × {formatCentimeters(part.depth)} ×{" "}
+                {formatCentimeters(part.height)} cm
               </span>
               <span className="mt-1.5 inline-flex rounded-sm bg-surface-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                {connections.receivesStuds ? "Stud mount" : "Connector placement unavailable"}
-              </span>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                {diagnosticSupported ? "Volume check supported" : "Volume check unavailable"}
+                {connectable ? "Connect supported" : "Visual detail"}
               </span>
             </button>
             <button
@@ -288,6 +304,7 @@ export function PartCatalog({
           <p className="mt-2 text-xs">
             {collectionLabel} · {categoryLabel}
             {filters.usedOnly ? " · Currently used" : ""}
+            {filters.connectableOnly ? " · Connectable" : ""}
           </p>
           <p className="mt-2 text-xs">
             {filters.collection === "favorites" && favorites.length === 0

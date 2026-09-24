@@ -4,7 +4,7 @@ ID: FE-TRACE-001
 
 Owner/scope: frontend repository
 
-Status: Historical execution records retained; product-continuity checks recorded in acceptance
+Status: Historical execution records retained; current workspace checks recorded in acceptance
 
 Baseline: execution brief 1.1.0 / consolidated product v0.0.3, 2026-09-24.
 
@@ -68,3 +68,9 @@ Contracts are in [experience](editor/EXPERIENCE.md) and [modeling](editor/MODELI
 The owner-authorized follow-up restores FE-011/012's reachable pre-authored roof proposal, connects FE-003/013's brief and local references to the project browser session, retains EDR-024 image/calibration context across project navigation, and exposes FE-008/009's parts/instruction routes directly from the workbench. Visual language, construction system, technique, intended use and constraints remain distinct. It does not add real AI, a backend, PDF analysis, durable persistence or manufacturing validation.
 
 [Baseline alignment](product/BASELINE_ALIGNMENT.md) maps D1/D2 requirements and invariants; [scope](product/FRONTEND_SCOPE.md#capability-coverage) states the capability matrix; [journeys](product/USER_FLOWS.md) and [screens](design/SCREENS.md) define the changed contracts. The [current acceptance ledger](delivery/ACCEPTANCE.md#product-continuity-follow-up--2026-09-24) distinguishes the initial working-tree checks from the subsequently authorized exact-staged verification/review records. The documentation mapping alone is not test evidence.
+
+## General-purpose workspace and instruction drafts
+
+[FE-DEC-014](DECISIONS.md#fe-dec-014-manual-building-feedback-and-nominal-attachment-review) and [FE-DEC-015](DECISIONS.md#fe-dec-015-general-purpose-workspace-and-local-instruction-drafts) extend FE-004/005/007/010/019 with nominal attachment reporting, receiving door/slope geometry, metric controls, expanded catalog discovery, bounded floating tools and optional construction templates. FE-008/009 gain deterministic model-derived drafts, exact source signatures, regeneration after edits, new-piece highlighting and reversible step previews. This does not establish a physically verified assembly order.
+
+Core coverage is in [attachment status](../tests/unit/attachment-status.test.ts), [architectural placement](../tests/unit/architectural-placement.test.ts), [catalog connectors](../tests/unit/catalog-rectangular-parts.test.ts), [build plans](../tests/unit/build-plan.test.ts) and [template preview](../tests/unit/architecture-preview.test.ts). User-facing integration is covered by [viewport controls](../tests/component/model-viewport.test.tsx), [generated instructions](../tests/component/generated-instructions.test.tsx), [manual modeling](../tests/component/manual-workbench.test.tsx), [editor UX](../tests/e2e/editor-ux.spec.ts) and the [staged courtyard journey](../tests/e2e/building-journey.spec.ts). [Acceptance](delivery/ACCEPTANCE.md#general-purpose-workspace-follow-up--2026-09-24) records exact executed results and remaining limits.

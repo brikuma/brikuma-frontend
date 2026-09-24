@@ -1,10 +1,11 @@
 import { findStudContacts, getPartConnections, worldStudSites } from "./connections";
 import {
   diagnosePlacement,
+  DIAGNOSTIC_RULE,
   hasSupportedDiagnosticGeometry,
   type PlacementDiagnostic,
 } from "./diagnostics";
-import { failure } from "./model";
+import { failure, isValidTransform } from "./model";
 import type { GridTransform, Model, PartDefinition, QuarterTurn, Result } from "./types";
 
 export interface PlacementCandidate {
@@ -136,7 +137,13 @@ export function validatePlacement(
   definition: PartDefinition,
   transform: GridTransform,
   mode: "connect" | "grid" | "free",
+  bounds = Infinity,
 ): Result<true> {
+  if (!isValidTransform(transform, bounds))
+    return failure(
+      "invalid-transform",
+      "Use 0.1-stud steps for X and Z, 0.05-stud steps for Y, and a position inside the demo bounds.",
+    );
   if (mode === "free") return { ok: true, value: true };
   const diagnosis = diagnosePlacement(model, definitions, definition, transform);
   if (diagnosis.status === "conflict")
@@ -208,7 +215,7 @@ export function diagnoseModel(model: Model, definitions: readonly PartDefinition
   });
   return {
     modelRevision: model.revision,
-    rule: "original-rectangular-shell-v1" as const,
+    rule: DIAGNOSTIC_RULE,
     conflicts,
     uncheckedIds: [...unchecked],
     checkedInstanceCount,

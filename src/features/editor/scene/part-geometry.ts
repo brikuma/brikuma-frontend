@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.j
 import type { PartDefinition } from "@/core/model/public";
 import { buildArchitecturalGeometry } from "./architectural-geometry";
 import { buildJoineryGeometry } from "./joinery-geometry";
+import { buildDoorAssemblyGeometry } from "./door-geometry";
 import {
   buildBrickShell,
   buildRoundBrickShell,
@@ -14,6 +15,8 @@ import {
 
 export function buildPartGeometry(definition: PartDefinition, detailed = true) {
   const { width: w, height: h, depth: d, shape } = definition;
+  const door = buildDoorAssemblyGeometry(definition, detailed);
+  if (door) return door;
   const joinery = buildJoineryGeometry(definition, detailed);
   if (joinery) return joinery;
   const architectural = buildArchitecturalGeometry(definition, detailed);

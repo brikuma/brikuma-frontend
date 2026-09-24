@@ -118,8 +118,7 @@ describe("Stud connector geometry and placement", () => {
     };
     expect(placementFeedback(blocked, partDefinitions, pending)).toMatchObject({
       allowed: false,
-      message:
-        "Nearby geometry is outside the supported overlap check. Choose Free position to make an unverified draft.",
+      message: "This connection cannot be checked. Choose a supported piece or another position.",
     });
   });
   it("keeps free-form placement explicit and does not mutate the model", () => {

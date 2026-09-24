@@ -10,16 +10,16 @@ Baseline: execution brief 1.1.0 / consolidated product v0.0.3, 2026-09-24.
 
 Target WCAG 2.2 AA for implemented behavior; automated checks are not certification. Use semantic landmarks/headings, explicit labels, visible focus, Escape/focus restoration in dialogs, reduced motion, forced-color awareness and restrained live announcements. Body contrast target is 4.5:1, applicable large text and required non-text boundaries 3:1. Prefer 44×44px important touch actions; WCAG AA minimum target-size criterion is 24×24px with exceptions.
 
-| Width (CSS px) | Composition                                                                                                     |
-| -------------- | --------------------------------------------------------------------------------------------------------------- |
-| 320–639        | Single column; editor viewer with explicit 3D activation, tabs/bottom sheets; desktop precision recommendation. |
-| 640–767        | Wider compact composition, no permanent sidebars.                                                               |
-| 768–1023       | Tablet shell with one inspector sheet at a time.                                                                |
-| 1024–1279      | Compact desktop, possible left panel; right inspector toggle/sheet.                                             |
-| 1280–1535      | 56px workbench rail, 232px left and 256px right panels, with independent collapse controls.                     |
-| 1536+          | 56px rail, 248px left and 272px right panels; the remaining width belongs to the canvas.                        |
+| Width (CSS px) | Composition                                                                             |
+| -------------- | --------------------------------------------------------------------------------------- |
+| 320–639        | Single column; choosing a part activates 3D, with a nonmodal panel below the viewport.  |
+| 640–767        | Wider compact composition, no permanent sidebars.                                       |
+| 768–1023       | Tablet shell with one nonmodal panel beside the usable canvas.                          |
+| 1024–1279      | Compact desktop; inspector temporarily replaces the left panel without a modal overlay. |
+| 1280–1535      | 256px left and 280px right panels, with independent collapse controls.                  |
+| 1536+          | 256px left and 280px right panels; the remaining width belongs to the canvas.           |
 
-Editor geometry uses the 48px shared header token, compact combined project/navigation strip, compact viewport toolbar and a small status row. Project navigation can scroll horizontally when its links exceed the available width; the page itself must not overflow. The optional authored-change assistant is a compact strip; its comparison opens explicitly and cannot obscure the canvas or focus during ordinary building. Use `100dvh`/independent panel scrolling on desktops at least 1024px wide and 740px high; at short height/reflow allow sensible page scrolling. Never hide overflow to conceal a layout bug.
+Editor geometry uses the 48px shared header token, compact combined project/navigation strip, compact viewport toolbar and a small status row. Project navigation can scroll horizontally when its links exceed the available width; the page itself must not overflow. The optional authored-change assistant sits inside More tools. Floating tool groups remain bounded by the editing area; advanced options open explicitly. The inspector starts collapsed and opens on selection. Use `100dvh`/independent panel scrolling on desktops at least 1024px wide and 740px high; at short height/reflow allow sensible page scrolling. Never hide overflow to conceal a layout bug.
 
 Required inspection sizes: 320×568, 390×844, 768×1024, 1024×768, 1280×800, 1440×900, 1536×1024 and 1920×1080, plus short desktop, wide display, 200% zoom and 400% reflow. Record actual screenshot/manual evidence in [acceptance](../delivery/ACCEPTANCE.md).
 

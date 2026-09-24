@@ -1,6 +1,8 @@
+import { openDetails as expand, openInspector as inspector } from "./editor-controls";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
+import { partDefinitions } from "../../src/fixtures/catalog";
 
 const artifactDirectory = "artifacts/editor-ux";
 type BrowserErrors = { page: string[]; console: string[]; http: string[] };
@@ -86,7 +88,9 @@ async function openBlank(page: Page) {
 async function addAt(page: Page, name: string, x?: number) {
   await page.getByRole("button", { name: `Add ${name}`, exact: true }).click();
   if (x !== undefined) {
-    await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill(String(x));
+    await expand(page, "Advanced placement");
+    await page.getByRole("button", { name: "Grid", exact: true }).click();
+    await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill(String(x * 0.8));
     await page.getByRole("button", { name: "Update preview", exact: true }).click();
   }
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
@@ -97,6 +101,7 @@ async function addAt(page: Page, name: string, x?: number) {
 }
 
 async function openStudy(page: Page, id: string) {
+  await expand(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Local project files", exact: true });
   await dialog.getByRole("combobox", { name: "Study", exact: true }).selectOption(id);
@@ -114,6 +119,84 @@ async function logicalIds(page: Page) {
       options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
     );
 }
+
+test("UX-007: at 842px the model stays visible while building and repeat waits for a new position", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 842, height: 781 });
+  await page.goto("/editor/?project=blank");
+  await expect(shell(page)).toHaveAttribute("data-count", "0");
+  await page.getByRole("button", { name: "Parts & structure", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Parts and structure", exact: true });
+  await panel.getByRole("button", { name: "Add Plate 4 × 4", exact: true }).click();
+  await ready(page);
+  const canvas = page.locator("canvas");
+  const canvasBox = (await canvas.boundingBox())!;
+  const panelBox = (await panel.boundingBox())!;
+  expect(canvasBox.width).toBeGreaterThan(300);
+  expect(canvasBox.height).toBeGreaterThan(200);
+  expect(canvasBox.x + canvasBox.width).toBeLessThanOrEqual(panelBox.x + 1);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await panel.getByRole("checkbox", { name: "Repeat placement", exact: true }).check();
+  await panel.getByRole("button", { name: "Place brick", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-part-count", "1");
+  const pending = panel.getByRole("region", { name: "Pending brick placement", exact: true });
+  await expect(pending.getByText(/Placed. Choose the next position/)).toBeVisible();
+  await expect(pending.getByRole("button", { name: "Place brick", exact: true })).toBeDisabled();
+  await expect(pending.getByText(/This position overlaps another piece/)).toHaveCount(0);
+  await expand(page, "Advanced placement");
+  await pending.getByRole("button", { name: "Grid", exact: true }).click();
+  await expand(page, "Advanced placement");
+  await pending.getByRole("button", { name: "Free position", exact: true }).click();
+  await expand(page, "Advanced placement");
+  await pending.getByRole("button", { name: "Free position", exact: true }).click();
+  await expect(pending.getByRole("button", { name: "Place brick", exact: true })).toBeDisabled();
+  await pending.getByRole("spinbutton", { name: "Placement X", exact: true }).fill("3.2");
+  await pending.getByRole("button", { name: "Update preview", exact: true }).click();
+  await pending.getByRole("button", { name: "Place brick", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-part-count", "2");
+  await panel.getByRole("button", { name: "Cancel placement", exact: true }).click();
+  await panel.getByRole("button", { name: "Add Brick 1 × 2", exact: true }).click();
+  await expand(page, "Advanced placement");
+  await expect(panel.getByRole("button", { name: "Attach to model", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expand(page, "Choose a surface from the list");
+  const candidates = panel.getByRole("list", { name: "Connector candidates" }).getByRole("button");
+  await candidates.filter({ hasText: "Clear" }).first().click();
+  await panel.getByRole("button", { name: "Place brick", exact: true }).click();
+  await expect(canvas).toHaveAttribute("data-part-count", "3");
+  await page.screenshot({ path: `${artifactDirectory}/building-tray-842x781.png`, fullPage: true });
+});
+
+test("UX-008: free-position precision errors are visible before preview or Place", async ({
+  page,
+}) => {
+  await openBlank(page);
+  await page.getByRole("button", { name: "Add Tower door leaf", exact: true }).click();
+  const pending = page.getByRole("region", { name: "Pending brick placement", exact: true });
+  await expand(page, "Advanced placement");
+  await expect(pending.getByRole("button", { name: "Free position", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  const z = pending.getByRole("spinbutton", { name: "Placement Z", exact: true });
+  await z.fill("2.12");
+  await expect(z).toHaveAttribute("aria-invalid", "true");
+  await expect(pending.getByText(/Use 0.08 cm steps left\/right/)).toBeVisible();
+  await expect(pending.getByRole("button", { name: "Update preview", exact: true })).toBeDisabled();
+  await expect(pending.getByRole("button", { name: "Place brick", exact: true })).toBeDisabled();
+  await expect(shell(page)).toHaveAttribute("data-count", "0");
+  await z.fill("1.68");
+  await pending.getByRole("button", { name: "Update preview", exact: true }).click();
+  await pending.getByRole("button", { name: "Place brick", exact: true }).click();
+  await expect(shell(page)).toHaveAttribute("data-count", "1");
+  await expand(page, "Advanced position");
+  await expect(page.getByRole("spinbutton", { name: "Position Z", exact: true })).toHaveValue(
+    "1.68",
+  );
+});
 
 test("UX-001: canvas R rotates only the placement preview and shortcuts respect input and dialog focus", async ({
   page,
@@ -147,6 +230,7 @@ test("UX-001: canvas R rotates only the placement preview and shortcuts respect 
   await search.press("ControlOrMeta+d");
   await expect(shell(page)).toHaveAttribute("data-revision", committed!);
   await expect(shell(page)).toHaveAttribute("data-count", "1");
+  await expand(page, "Project tools");
   await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Editor shortcuts", exact: true });
   await dialog.getByRole("button", { name: "Close dialog", exact: true }).focus();
@@ -225,11 +309,14 @@ test("UX-003: diagnostic reveal selects the actual conflict and retains hidden s
   await expect(
     page.getByRole("button", { name: "Show hidden parts (1)", exact: true }),
   ).toBeVisible();
+  await inspector(page);
   await page
     .getByRole("combobox", { name: "Choose a logical part", exact: true })
     .selectOption("lab-even-width");
+  await expand(page, "View tools");
   await page.getByRole("button", { name: "Inspect selected brick", exact: true }).click();
   await expect(page.locator("canvas")).toHaveAttribute("data-visible-part-count", "1");
+  await inspector(page);
   await page.getByRole("button", { name: "Checks", exact: true }).click();
   await page.getByRole("button", { name: "Run supported checks", exact: true }).click();
   const diagnostics = page.getByRole("region", { name: "Geometric diagnostics", exact: true });
@@ -264,13 +351,19 @@ test("UX-003: diagnostic reveal selects the actual conflict and retains hidden s
     page.getByRole("button", { name: "Show hidden parts (1)", exact: true }),
   ).toBeVisible();
   await expect(page.locator("canvas")).toHaveAttribute("data-visible-part-count", "27");
+  await inspector(page);
   await page.getByRole("button", { name: "Checks", exact: true }).click();
   await expect(current).toBeVisible();
   await expect(page.getByRole("button", { name: "Recalculate checks", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Build", exact: true })
+    .click();
   await page.getByRole("button", { name: "Selection", exact: true }).click();
   await page.getByRole("combobox", { name: "Selection color", exact: true }).selectOption("teal");
   await expect(shell(page)).not.toHaveAttribute("data-revision", before!);
+  await inspector(page);
   await page.getByRole("button", { name: "Checks", exact: true }).click();
   await expect(
     diagnostics.getByText(`Stale: model revision changed · ${before}`, { exact: true }),
@@ -317,6 +410,7 @@ test("UX-005: duplicating a child of a hidden parent reveals only the new copy a
       ],
     },
   };
+  await expand(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   await page.getByLabel("Load project file", { exact: true }).setInputFiles({
     name: "original-nested-visibility.brikuma.json",
@@ -334,6 +428,7 @@ test("UX-005: duplicating a child of a hidden parent reveals only the new copy a
   await expect(
     page.getByRole("button", { name: "Show hidden parts (2)", exact: true }),
   ).toBeVisible();
+  await inspector(page);
   await page
     .getByRole("combobox", { name: "Choose a logical part", exact: true })
     .selectOption("nested-source");
@@ -364,7 +459,7 @@ test("UX-005: duplicating a child of a hidden parent reveals only the new copy a
   expect(await logicalIds(page)).toEqual(["nested-source", "hidden-sibling"]);
 });
 
-test("UX-004: original-ID search, favorites and committed recents survive panel and responsive sheet changes", async ({
+test("UX-004: original-ID search, favorites and committed recents survive responsive panel changes", async ({
   page,
   browserName,
 }) => {
@@ -374,16 +469,18 @@ test("UX-004: original-ID search, favorites and committed recents survive panel 
   const query = " DEMO-BRICK-2X4 ";
   await search.fill(query);
   const add = page.getByRole("button", { name: "Add Brick 2 × 4", exact: true });
-  await expect(add).toHaveAccessibleDescription("ID: demo-brick-2x4");
-  await expect(page.getByText("ID: demo-brick-2x4", { exact: true })).toBeVisible();
+  await expect(add).toContainText("3.2 × 1.6 × 0.96 cm");
+  await expect(page.getByText("ID: demo-brick-2x4", { exact: true })).toHaveCount(0);
   const favorite = page.getByRole("button", { name: "Favorite Brick 2 × 4", exact: true });
   await favorite.focus();
   await page.keyboard.press("Enter");
   await expect(favorite).toHaveAttribute("aria-pressed", "true");
+  await expand(page, "More filters");
   await page.getByRole("button", { name: "Favorites", exact: true }).click();
   await add.click();
   await page.locator("canvas").focus();
   await page.keyboard.press("Escape");
+  await expand(page, "More filters");
   await page.getByRole("button", { name: "Recent", exact: true }).click();
   await expect(add).toHaveCount(0);
   await expect(
@@ -392,10 +489,13 @@ test("UX-004: original-ID search, favorites and committed recents survive panel 
     }),
   ).toBeVisible();
   await expect(shell(page)).toHaveAttribute("data-count", "0");
+  await expand(page, "More filters");
   await page.getByRole("button", { name: "Favorites", exact: true }).click();
   await addAt(page, "Brick 2 × 4");
+  await expand(page, "More filters");
   await page.getByRole("button", { name: "Recent", exact: true }).click();
   await expect(add).toBeVisible();
+  await expand(page, "More filters");
   await page.getByRole("checkbox", { name: "Currently used", exact: true }).check();
   await page.getByRole("combobox", { name: "Part category", exact: true }).selectOption("brick");
   await page.getByRole("button", { name: "Structure", exact: true }).click();
@@ -408,8 +508,22 @@ test("UX-004: original-ID search, favorites and committed recents survive panel 
   ]) {
     await page.setViewportSize({ width, height });
     await expect(page.locator("canvas")).toBeVisible();
-    if (width < 1024)
+    if (width < 1024) {
       await page.getByRole("button", { name: "Parts & structure", exact: true }).click();
+      // Fiber applies ResizeObserver measurements asynchronously after the panel opens.
+      await expect
+        .poll(async () => {
+          const canvasBounds = (await page.locator("canvas").boundingBox())!;
+          const panelBounds = (await page
+            .getByRole("complementary", { name: "Parts and structure", exact: true })
+            .boundingBox())!;
+          return width < 768
+            ? canvasBounds.y + canvasBounds.height - panelBounds.y
+            : canvasBounds.x + canvasBounds.width - panelBounds.x;
+        })
+        .toBeLessThanOrEqual(1);
+    }
+    await expand(page, "More filters");
     await expect(search).toHaveValue(query);
     await expect(favorite).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: "Recent", exact: true })).toHaveAttribute(
@@ -430,8 +544,8 @@ test("UX-004: original-ID search, favorites and committed recents survive panel 
     });
     if (width < 1024)
       await page
-        .getByRole("dialog", { name: "Parts & structure", exact: true })
-        .getByRole("button", { name: "Close dialog", exact: true })
+        .getByRole("complementary", { name: "Parts and structure", exact: true })
+        .getByRole("button", { name: "Close panel", exact: true })
         .click();
     await expect(shell(page)).toHaveAttribute("data-revision", before!);
     await expect(shell(page)).toHaveAttribute("data-count", "1");
@@ -448,7 +562,7 @@ test("UX-006: a short desktop keeps the model bounded while the complete catalog
   await page.setViewportSize({ width: 1280, height: 500 });
   const catalog = page.getByRole("complementary", { name: "Parts and structure", exact: true });
   const canvas = page.locator("canvas");
-  await expect(catalog.getByRole("button", { name: /^Add / })).toHaveCount(67);
+  await expect(catalog.getByRole("button", { name: /^Add / })).toHaveCount(partDefinitions.length);
   const dimensions = await page.evaluate(() => {
     const grid = document.querySelector(".workbench-grid")!;
     const renderer = document.querySelector("canvas")!;
@@ -481,7 +595,7 @@ test("UX-006: a short desktop keeps the model bounded while the complete catalog
     catalog.getByRole("button", { name: "Add Smooth tile 2 × 4", exact: true }),
   ).toBeVisible();
   await search.clear();
-  await expect(catalog.getByRole("button", { name: /^Add / })).toHaveCount(67);
+  await expect(catalog.getByRole("button", { name: /^Add / })).toHaveCount(partDefinitions.length);
   await page.getByRole("button", { name: "Fit model to view", exact: true }).click();
   await expect(canvas).toBeVisible();
   await expect(shell(page)).toHaveAttribute("data-revision", before!);

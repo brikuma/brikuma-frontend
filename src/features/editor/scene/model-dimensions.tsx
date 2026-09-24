@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Line } from "@react-three/drei";
 import { Box3, CanvasTexture, OrthographicCamera, Sprite, SRGBColorSpace, Vector3 } from "three";
-import type { GridTransform, Model, PartInstance } from "@/core/model/public";
+import {
+  formatCentimeters,
+  type GridTransform,
+  type Model,
+  type PartInstance,
+} from "@/core/model/public";
 import { partDefinitions } from "@/fixtures/catalog";
 import { ZERO_ASSEMBLY_OFFSET, type AssemblyOffset } from "../assembly-view";
 
@@ -69,7 +74,7 @@ function Dimension({
   );
 }
 
-/** Visual dimensions use model units; they do not claim a calibrated physical size. */
+/** Metric labels use the nominal demo pitch; geometry remains in canonical model units. */
 export function ModelDimensions({
   bounds,
   part,
@@ -112,7 +117,7 @@ export function ModelDimensions({
   const span = measured.getSize(new Vector3());
   const margin = part ? 0.45 : 1.1;
   const y = Math.max(0.05, min.y);
-  const label = (value: number) => `${Number(value.toFixed(2))} studs`;
+  const label = (value: number) => `${formatCentimeters(value)} cm`;
   return (
     <group userData={{ studioHelper: true }}>
       <Dimension

@@ -159,6 +159,7 @@ export function applyCommand(
       definition,
       command.instance.transform,
       command.placement,
+      policy.bounds,
     );
     if (!placement.ok) return placement;
     nextCommand = { type: "add", instance: command.instance };

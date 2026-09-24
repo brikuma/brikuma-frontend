@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,6 +29,9 @@ vi.mock("next/dynamic", () => ({
       fitSelection,
       selected,
       selectedIds,
+      navigation,
+      selectThrough,
+      onPickCandidates,
     }: ModelViewportProps & {
       view: CameraView;
       tool: ViewportTool;
@@ -40,11 +43,20 @@ vi.mock("next/dynamic", () => ({
       projection: string;
       rotationPreview: number | null;
       fitSelection: boolean;
+      navigation: string;
+      selectThrough: boolean;
+      onPickCandidates: (ids: readonly string[]) => void;
     }) {
       return (
         <div>
           <div data-testid="scene-camera">{`${view} · ${tool}`}</div>
           <div data-testid="scene-projection">{projection}</div>
+          <div data-testid="scene-navigation">{navigation}</div>
+          {selectThrough && (
+            <button onClick={() => onPickCandidates(["brick-2", "brick-1"])}>
+              Mock overlapping surfaces
+            </button>
+          )}
           <div data-testid="scene-rotation-preview">{rotationPreview ?? "No rotation preview"}</div>
           <div data-testid="scene-inspection">{inspectionPartId ?? "Complete model"}</div>
           <div data-testid="scene-model-count">{model.instances.length}</div>
@@ -63,15 +75,203 @@ vi.mock("next/dynamic", () => ({
     },
 }));
 
+function openViewTools() {
+  const summary = screen.getByText("View tools");
+  if (!summary.closest("details")!.open) fireEvent.click(summary);
+}
+
 beforeEach(() => {
   vi.stubGlobal(
     "requestAnimationFrame",
     vi.fn(() => 1),
   );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => ({ matches: false })),
+  );
 });
 
 describe("Specialist camera and rotation controls", () => {
+  it.each(["Select tool", "Move tool", "Rotate tool"])(
+    "leaves Orbit when choosing %s and marks only the active tool",
+    async (name) => {
+      const user = userEvent.setup();
+      render(<ModelViewport {...selectedViewportProps()} onRotate={vi.fn(() => true)} />);
+      await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+      const orbit = screen.getByRole("button", { name: "Navigate camera" });
+      await user.click(orbit);
+      expect(orbit).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Select tool" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("trackpad");
+
+      await user.click(screen.getByRole("button", { name }));
+      expect(orbit).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+    },
+  );
+
+  it("enables one-finger Orbit for a coarse pointer and keeps the advanced device preference", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((query: string) => ({ matches: query === "(pointer: coarse)" })),
+    );
+    const user = userEvent.setup();
+    render(<ModelViewport {...selectedViewportProps()} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("touch");
+    await user.click(screen.getByRole("button", { name: "Select tool" }));
+    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+    openViewTools();
+    const device = screen.getByRole("combobox", { name: "Camera controls" });
+    expect(device).toHaveValue("touch");
+    await user.selectOptions(device, "trackpad");
+    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("trackpad");
+    expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "Select tool" }));
+    await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("trackpad");
+    expect(device).toHaveValue("trackpad");
+  });
+
+  it("exits Orbit for keyboard and externally requested editing tools", async () => {
+    const user = userEvent.setup();
+    const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
+    const { rerender } = render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    for (const key of ["v", "g", "r"]) {
+      await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+      fireEvent.keyDown(screen.getByTestId("model-viewport"), { key });
+      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+      expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    }
+    await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+    rerender(<ModelViewport {...props} toolRequest={{ serial: 1, tool: "move" }} />);
+    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+    expect(screen.getByRole("button", { name: "Move tool" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("closes View tools for the HTML part chooser and preserves ray-hit ordering", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    openViewTools();
+    const details = screen.getByText("View tools").closest("details")!;
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    expect(details.open).toBe(false);
+    const chooser = screen.getByRole("combobox", { name: "Choose a model part" });
+    expect(chooser).toBeVisible();
+    expect(chooser).toHaveFocus();
+    expect(
+      within(chooser).getByRole("option", { name: "Brick 2 × 4 · Warm ivory · brick-2" }),
+    ).toBeVisible();
+    await user.selectOptions(chooser, "brick-2");
+    expect(props.onSelect).toHaveBeenLastCalledWith("brick-2", undefined);
+    expect(screen.queryByRole("region", { name: "Select through parts" })).not.toBeInTheDocument();
+
+    openViewTools();
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    await user.click(screen.getByRole("button", { name: "Mock overlapping surfaces" }));
+    const overlapping = screen.getByRole("combobox", { name: "Choose an overlapping part" });
+    expect(
+      within(overlapping)
+        .getAllByRole("option")
+        .map((option) => option.getAttribute("value")),
+    ).toEqual(["", "brick-2", "brick-1"]);
+    openViewTools();
+    expect(screen.queryByRole("region", { name: "Select through parts" })).not.toBeInTheDocument();
+  });
+
+  it("cancels Select through with Escape from its automatically focused chooser", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const before = structuredClone(props.model);
+    const parent = vi.fn();
+    render(
+      <div onKeyDown={parent}>
+        <ModelViewport {...props} />
+      </div>,
+    );
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    openViewTools();
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    expect(screen.getByRole("combobox", { name: "Choose a model part" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("region", { name: "Select through parts" })).not.toBeInTheDocument();
+    expect(screen.getByText("View tools")).toHaveFocus();
+    expect(parent).not.toHaveBeenCalled();
+    expect(props.onSelect).not.toHaveBeenCalled();
+    expect(props.onMove).not.toHaveBeenCalled();
+    expect(props.model).toEqual(before);
+  });
+
+  it("stops Move before selecting through overlapping parts", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.click(screen.getByRole("button", { name: "Move tool" }));
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · move");
+    openViewTools();
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    expect(screen.getByRole("button", { name: "Move tool" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await user.click(screen.getByRole("button", { name: "Mock overlapping surfaces" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Choose an overlapping part" }),
+      "brick-2",
+    );
+    expect(props.onSelect).toHaveBeenLastCalledWith("brick-2", undefined);
+    expect(props.onMove).not.toHaveBeenCalled();
+  });
+
+  it("cancels a pending placement before opening the part chooser", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const place = vi.fn(() => true);
+    function PlacementOwner() {
+      const [pending, setPending] = useState<PlacementPreview | null>(placement);
+      return (
+        <ModelViewport
+          {...props}
+          placement={pending}
+          onPlace={place}
+          onCancelPlacement={() => {
+            props.onCancelPlacement?.();
+            setPending(null);
+          }}
+        />
+      );
+    }
+    render(<PlacementOwner />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    expect(screen.getByTestId("scene-placement-rotation")).toHaveTextContent("0");
+    openViewTools();
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    expect(props.onCancelPlacement).toHaveBeenCalledOnce();
+    expect(screen.getByTestId("scene-placement-rotation")).toHaveTextContent("No placement");
+    expect(screen.getByRole("combobox", { name: "Choose a model part" })).toHaveFocus();
+    expect(place).not.toHaveBeenCalled();
+  });
+
   it("UX-KEY-001: placement R belongs to the parent and never cancels or commits the ghost", async () => {
     const user = userEvent.setup();
     const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
@@ -121,19 +321,20 @@ describe("Specialist camera and rotation controls", () => {
       </div>,
     );
     await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Select through" }));
     await user.click(screen.getByRole("button", { name: "Rotate tool" }));
     await user.click(screen.getByRole("button", { name: "Preview +90°" }));
     props.onCancelPlacement.mockClear();
     fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
     expect(screen.getByTestId("scene-rotation-preview")).toHaveTextContent("No rotation preview");
-    expect(screen.getByRole("button", { name: "Select through" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Select through", hidden: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
     expect(parent).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
-    expect(screen.getByRole("button", { name: "Select through" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Select through", hidden: true })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
@@ -185,6 +386,7 @@ describe("Specialist camera and rotation controls", () => {
     const text = document.createElement("span");
     editable.append(text);
     viewport.append(editable);
+    openViewTools();
     for (const target of [text, screen.getByRole("combobox", { name: "Camera projection" })]) {
       for (const key of ["1", "g", "r", "Escape"]) fireEvent.keyDown(target, { key });
     }
@@ -283,13 +485,11 @@ describe("Specialist camera and rotation controls", () => {
     const user = userEvent.setup();
     const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
     const { rerender } = render(<ModelViewport {...props} compactControls />);
-    expect(screen.getByText("Camera & view options").closest("details")).not.toHaveAttribute(
-      "open",
-    );
+    expect(screen.queryByText("Camera & view options")).not.toBeInTheDocument();
     expect(screen.getByText("View tools").closest("details")).not.toHaveAttribute("open");
     for (const label of ["Select tool", "Move tool", "Rotate tool"])
       expect(screen.getByRole("button", { name: label })).toBeVisible();
-    await user.click(screen.getByText("Camera & view options"));
+    await user.click(screen.getByText("View tools"));
     expect(screen.getByRole("combobox", { name: "Camera projection" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
     expect(screen.getAllByTestId("scene-camera")).toHaveLength(1);
@@ -343,12 +543,14 @@ describe("Specialist camera and rotation controls", () => {
     const props = selectedViewportProps();
     const { rerender } = render(<ModelViewport {...props} mode="build" />);
     await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    openViewTools();
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Camera projection" }),
       "perspective",
     );
     rerender(<ModelViewport {...props} mode="present" />);
     expect(screen.getByTestId("scene-projection")).toHaveTextContent("perspective");
+    openViewTools();
     await user.selectOptions(
       screen.getByRole("combobox", { name: "Camera projection" }),
       "orthographic",
@@ -391,6 +593,7 @@ describe("Specialist camera and rotation controls", () => {
         onEditingLockChange={lock}
       />,
     );
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
     expect(screen.getByTestId("scene-inspection")).toHaveTextContent("brick-1");
     rerender(
@@ -410,6 +613,7 @@ describe("Specialist camera and rotation controls", () => {
     const lock = vi.fn();
     render(<ModelViewport {...selectedViewportProps()} onEditingLockChange={lock} />);
     expect(lock).toHaveBeenLastCalledWith(false);
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
     expect(lock).toHaveBeenLastCalledWith(true);
     await user.click(screen.getByRole("button", { name: "Exit brick inspection" }));
@@ -446,15 +650,44 @@ function selectedViewportProps(): ModelViewportProps {
 }
 
 describe("Selected brick inspection", () => {
+  it.each([false, true])(
+    "enables primary inspection orbit with a coarse pointer: %s",
+    async (coarse) => {
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn((query: string) => ({ matches: coarse && query === "(pointer: coarse)" })),
+      );
+      const user = userEvent.setup();
+      render(<ModelViewport {...selectedViewportProps()} />);
+      openViewTools();
+      await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
+      expect(screen.getByTestId("scene-navigation")).toHaveTextContent(
+        coarse ? "touch" : "trackpad",
+      );
+      expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await user.click(screen.getByRole("button", { name: "Exit brick inspection" }));
+      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+      expect(screen.getByRole("button", { name: "Select tool" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    },
+  );
+
   it("requires an existing selected brick", () => {
     const props = viewportProps();
     const { rerender } = render(<ModelViewport {...props} />);
+    openViewTools();
     expect(screen.getByRole("button", { name: "Inspect selected brick" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Inspect selected brick" })).toHaveAttribute(
       "title",
       "Select a brick to inspect its underside",
     );
     rerender(<ModelViewport {...props} selected="missing-brick" />);
+    openViewTools();
     expect(screen.getByRole("button", { name: "Inspect selected brick" })).toBeDisabled();
   });
 
@@ -463,6 +696,7 @@ describe("Selected brick inspection", () => {
     const props = selectedViewportProps();
     const originalModel = structuredClone(props.model);
     render(<ModelViewport {...props} />);
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
     expect(screen.getAllByTestId("scene-camera")).toHaveLength(1);
     expect(screen.getByTestId("scene-inspection")).toHaveTextContent("brick-1");
@@ -490,6 +724,7 @@ describe("Selected brick inspection", () => {
     async (label) => {
       const user = userEvent.setup();
       render(<ModelViewport {...selectedViewportProps()} />);
+      openViewTools();
       await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
       await user.click(screen.getByRole("button", { name: label }));
       expect(screen.getByTestId("scene-inspection")).toHaveTextContent("Complete model");
@@ -507,6 +742,7 @@ describe("Selected brick inspection", () => {
     const user = userEvent.setup();
     const props = selectedViewportProps();
     const { rerender } = render(<ModelViewport {...props} />);
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
     rerender(<ModelViewport {...props} placement={placement} />);
     expect(screen.getByTestId("scene-inspection")).toHaveTextContent("Complete model");
@@ -523,9 +759,11 @@ describe("Selected brick inspection", () => {
     const user = userEvent.setup();
     const props = selectedViewportProps();
     const { rerender } = render(<ModelViewport {...props} />);
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
     rerender(<ModelViewport {...props} selected={null} />);
     expect(screen.getByTestId("scene-inspection")).toHaveTextContent("Complete model");
+    openViewTools();
     expect(screen.getByRole("button", { name: "Inspect selected brick" })).toBeDisabled();
     rerender(<ModelViewport {...props} />);
     expect(screen.getByTestId("scene-inspection")).toHaveTextContent("Complete model");
@@ -533,9 +771,90 @@ describe("Selected brick inspection", () => {
 });
 
 describe("Authored assembly presentation", () => {
-  it("does not scatter a free-form model without defined modules", () => {
-    render(<ModelViewport {...selectedViewportProps()} />);
-    expect(screen.getByRole("button", { name: "Exploded view" })).toBeDisabled();
+  it.each(["layers", "modules"] as const)(
+    "reassembles from the floating toggle after switching roof separation to %s",
+    async (method) => {
+      const user = userEvent.setup();
+      const props = selectedViewportProps();
+      props.model = {
+        ...props.model,
+        instances: props.model.instances.map((part, index) => ({
+          ...part,
+          transform: { ...part.transform, y: 0.6 + index * 1.2 },
+        })),
+      };
+      props.assemblyView = {
+        modelId: props.model.id,
+        baselineRevision: props.model.baselineRevision,
+        fixedPartIds: ["brick-1"],
+        modules: [
+          {
+            id: "roof",
+            name: "Complete roof",
+            description: "Roof",
+            partIds: ["brick-2"],
+            offset: { x: 0, y: 4, z: 0 },
+            views: ["roof", "modules"],
+          },
+        ],
+      };
+      const before = structuredClone(props.model);
+      render(<ModelViewport {...props} />);
+      const toggle = screen.getByRole("button", { name: "Exploded view" });
+      await user.click(toggle);
+      expect(screen.getByTestId("scene-assembly")).toHaveTextContent("roof 1");
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "Disassembly method" }),
+        method,
+      );
+      expect(screen.getByTestId("scene-assembly")).toHaveTextContent(`${method} 1`);
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByTestId("scene-assembly")).toHaveTextContent("Assembled");
+      expect(screen.getByRole("button", { name: "Move tool" })).toBeEnabled();
+      expect(
+        screen.queryByRole("combobox", { name: "Disassembly method" }),
+      ).not.toBeInTheDocument();
+      expect(props.model).toEqual(before);
+      expect(props.onMove).not.toHaveBeenCalled();
+    },
+  );
+
+  it("explains why a single layer cannot separate and disables meaningless separation values", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const before = structuredClone(props.model);
+    render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Exploded view" }));
+    expect(
+      screen.getByText(/This model has one layer\. Add another layer to separate it/),
+    ).toBeVisible();
+    expect(screen.queryByText(/0 sections/)).not.toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Assembly separation" })).toBeDisabled();
+    expect(screen.getByRole("spinbutton", { name: "Assembly separation percent" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Reassemble" }));
+    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("Assembled");
+    expect(props.model).toEqual(before);
+  });
+
+  it("separates the current layers of a free-form model without authored modules", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    props.model = {
+      ...props.model,
+      instances: props.model.instances.map((part, index) => ({
+        ...part,
+        transform: { ...part.transform, y: 0.6 + index * 1.2 },
+      })),
+    };
+    const before = structuredClone(props.model);
+    render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Exploded view" }));
+    expect(screen.getByRole("combobox", { name: "Disassembly method" })).toHaveValue("layers");
+    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("layers 0.7");
+    await user.click(screen.getByRole("button", { name: "Reassemble" }));
+    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("Assembled");
+    expect(props.model).toEqual(before);
   });
 
   it("separates roof access from assembly, scales separation and restores the unchanged model", async () => {
@@ -558,12 +877,16 @@ describe("Authored assembly presentation", () => {
       ],
     };
     render(<ModelViewport {...props} />);
+    openViewTools();
     await user.click(screen.getByRole("button", { name: "Roof access" }));
     expect(screen.getByTestId("scene-assembly")).toHaveTextContent("roof 1");
     expect(screen.getByRole("button", { name: "Move tool" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Show dimensions" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Exploded view" }));
-    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("modules 0.7");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Disassembly method" }),
+      "modules",
+    );
+    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("modules 1");
     fireEvent.change(screen.getByRole("slider", { name: "Assembly separation" }), {
       target: { value: "100" },
     });
@@ -612,31 +935,30 @@ describe("Horizontal-grid editing camera", () => {
       const props = viewportProps();
       const { rerender } = render(<ModelViewport {...props} />);
       await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
-      await user.click(screen.getByRole("button", { name: `${elevation} view` }));
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "Camera view" }),
+        elevation.toLowerCase(),
+      );
       expect(screen.getByTestId("scene-camera")).toHaveTextContent(elevation.toLowerCase());
 
       rerender(<ModelViewport {...props} placement={placement} />);
       expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
-      expect(screen.getByRole("button", { name: "Isometric view" })).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      );
+      expect(screen.getByRole("combobox", { name: "Camera view" })).toHaveValue("iso");
       expect(screen.getByRole("status")).toHaveTextContent(
         "Isometric view for horizontal-grid editing",
       );
       for (const label of ["Front", "Right"]) {
-        const button = screen.getByRole("button", { name: `${label} view` });
+        const button = screen.getByRole("option", { name: `${label} view` });
         expect(button).toBeDisabled();
-        expect(button).toHaveAttribute(
-          "title",
-          "Finish or cancel placement to use elevation views",
+        await user.selectOptions(
+          screen.getByRole("combobox", { name: "Camera view" }),
+          label.toLowerCase(),
         );
-        await user.click(button);
         expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
       }
 
       rerender(<ModelViewport {...props} />);
-      expect(screen.getByRole("button", { name: `${elevation} view` })).toBeEnabled();
+      expect(screen.getByRole("option", { name: `${elevation} view` })).toBeEnabled();
       expect(screen.getByTestId("scene-camera")).toHaveTextContent(elevation.toLowerCase());
       expect(props.onMove).not.toHaveBeenCalled();
     },
@@ -648,25 +970,33 @@ describe("Horizontal-grid editing camera", () => {
       const user = userEvent.setup();
       render(<ModelViewport {...viewportProps()} />);
       await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
-      await user.click(screen.getByRole("button", { name: `${elevation} view` }));
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "Camera view" }),
+        elevation.toLowerCase(),
+      );
       await user.click(screen.getByRole("button", { name: "Move tool" }));
       expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · move");
       expect(screen.getByRole("status")).toHaveTextContent(
         "Isometric view for horizontal-grid editing",
       );
       for (const label of ["Front", "Right"]) {
-        const button = screen.getByRole("button", { name: `${label} view` });
+        const button = screen.getByRole("option", { name: `${label} view` });
         expect(button).toBeDisabled();
-        expect(button).toHaveAttribute("title", "Use Select to view elevations");
-        await user.click(button);
+        await user.selectOptions(
+          screen.getByRole("combobox", { name: "Camera view" }),
+          label.toLowerCase(),
+        );
         expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · move");
       }
 
-      await user.click(screen.getByRole("button", { name: "Top view" }));
+      await user.selectOptions(screen.getByRole("combobox", { name: "Camera view" }), "top");
       expect(screen.getByTestId("scene-camera")).toHaveTextContent("top · move");
       expect(screen.getByRole("status")).not.toHaveTextContent("Isometric");
       await user.click(screen.getByRole("button", { name: "Select tool" }));
-      await user.click(screen.getByRole("button", { name: `${elevation} view` }));
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "Camera view" }),
+        elevation.toLowerCase(),
+      );
       expect(screen.getByTestId("scene-camera")).toHaveTextContent(
         `${elevation.toLowerCase()} · select`,
       );
@@ -678,12 +1008,12 @@ describe("Horizontal-grid editing camera", () => {
     const props = viewportProps();
     const { rerender } = render(<ModelViewport {...props} />);
     await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
-    await user.click(screen.getByRole("button", { name: "Top view" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Camera view" }), "top");
     rerender(<ModelViewport {...props} placement={placement} />);
     expect(screen.getByTestId("scene-camera")).toHaveTextContent("top · select");
-    await user.click(screen.getByRole("button", { name: "Isometric view" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Camera view" }), "iso");
     expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
-    await user.click(screen.getByRole("button", { name: "Top view" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Camera view" }), "top");
     expect(screen.getByTestId("scene-camera")).toHaveTextContent("top · select");
   });
 });

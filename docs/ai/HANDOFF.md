@@ -1,8 +1,14 @@
 # Frontend handoff
 
-ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, product continuity follow-up.
+ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, general-purpose workspace follow-up.
 
-## Current product checkpoint
+## General-purpose workspace checkpoint
+
+The follow-up to `94ac671` implements [FE-DEC-014](../DECISIONS.md#fe-dec-014-manual-building-feedback-and-nominal-attachment-review) and [FE-DEC-015](../DECISIONS.md#fe-dec-015-general-purpose-workspace-and-local-instruction-drafts): nominal framed-door/slope connections and attachment coverage, an expanded general catalog, centimeters, quieter floating controls, optional building templates, local model-derived instruction drafts and generic layer separation. Free-form building remains the initial path. Real AI, manufacturer mapping, physical certification and durable persistence remain outside this frontend scope.
+
+[Acceptance](../delivery/ACCEPTANCE.md#general-purpose-workspace-follow-up--2026-09-24) owns the completed working-tree checks, browser reruns, manual inspection, audit and limits. The authorized commit cycle runs fresh exact-staged verification and read-only review through `artifacts/quality/verification.json` and `review.json`; its resulting commit identity and actual hook output are recorded separately in `artifacts/ux-fixes/general-workspace-commit-manifest.json`. Earlier checkpoint counts below are historical and do not replace these records. The root has no changes or approved integration pins to commit. The staged review also corrected assembly-toggle closure after switching separation methods, Escape cancellation from the focused Select through chooser, and stale current-coverage descriptions. Focused regressions and renewed exact-candidate checks are recorded in the commit evidence.
+
+## Previous product continuity checkpoint
 
 The follow-up to `0af5d77` restores the reachable pre-authored assisted-design preview and direct Brief/Workbench/Instructions/Parts inventory navigation. Brief intent, style, construction system, technique, intended use and constraints remain separate. Each existing project slot retains its brief, local images, PDF metadata and manual calibration across client-side routes. Editing this context does not change geometry, quantities or revision. Explicit replacement clears it after confirmation, including metadata-only changes; reset preserves it. Reload clears it, and scene downloads explicitly exclude brief/reference context.
 

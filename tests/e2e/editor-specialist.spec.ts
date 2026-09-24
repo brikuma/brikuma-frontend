@@ -1,3 +1,4 @@
+import { openDetails as expand, openInspector as inspector } from "./editor-controls";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -30,6 +31,7 @@ async function ready(page: Page) {
   await expect(page.locator('[data-scene-ready="true"]')).toBeVisible({ timeout: 20000 });
 }
 async function openStudy(page: Page, study: string) {
+  await expand(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Local project files", exact: true });
   await dialog.getByRole("combobox", { name: "Study", exact: true }).selectOption(study);
@@ -56,7 +58,7 @@ test("EDT-001,011,016,017: first-time building uses real picking, explained conn
   await page.getByRole("button", { name: "Fit model to view", exact: true }).click();
   await add(page);
   await expect(page.getByTestId("piece-count")).toHaveText("1");
-  await page.getByRole("button", { name: "Top view", exact: true }).click();
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
   await page.getByRole("button", { name: "Clear", exact: true }).click();
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -65,10 +67,12 @@ test("EDT-001,011,016,017: first-time building uses real picking, explained conn
   );
   await page.screenshot({ path: "artifacts/editor/selected-brick.png" });
   await page.getByRole("button", { name: "Add Plate 1 × 3", exact: true }).click();
+  await expand(page, "Advanced placement");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expand(page, "Choose a surface from the list");
   const candidates = page.getByRole("list", { name: "Connector candidates" }).getByRole("button");
   await expect(candidates.first()).toBeVisible();
-  await candidates.filter({ hasText: "No supported conflict" }).first().click();
+  await candidates.filter({ hasText: "Clear" }).first().click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("2");
   await page.getByRole("button", { name: "Undo local edit" }).click();
@@ -88,24 +92,36 @@ test("EDT-021,022,027: typed preview coordinates and mode guards cannot silently
   await page.goto("/editor/?project=blank");
   await ready(page);
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
+  await expand(page, "Advanced placement");
   await page.getByRole("button", { name: "Free position", exact: true }).click();
-  await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill("2.5");
+  await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill("2");
   await expect(page.getByRole("button", { name: "Place brick", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Update preview", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
-  await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).toHaveValue(
-    "2.5",
-  );
+  await expand(page, "Advanced position");
+  await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).toHaveValue("2");
   const before = await revision(page);
-  await page.getByRole("button", { name: "Inspect", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Inspect", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Undo local edit" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Apply position" })).toBeDisabled();
   await page.getByRole("region", { name: "Modeling workspace", exact: true }).focus();
   await page.keyboard.press("Control+z");
   expect(await revision(page)).toBe(before);
-  await page.getByRole("button", { name: "Present", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Present", exact: true })
+    .click();
   expect(await revision(page)).toBe(before);
-  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Build", exact: true })
+    .click();
   await page.getByRole("button", { name: "Undo local edit" }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
 });
@@ -118,6 +134,7 @@ test("EDT-009,026,040: hidden obstacle diagnostics and focus preserve physical m
   await openStudy(page, "placement-lab");
   await expect(page.getByRole("button", { name: "Show hidden parts (1)" })).toBeVisible();
   const before = await revision(page);
+  await inspector(page);
   await page.getByRole("button", { name: "Checks", exact: true }).click();
   await page.getByRole("button", { name: "Run supported checks" }).click();
   await page.screenshot({ path: "artifacts/editor/occupied-conflict.png" });
@@ -140,11 +157,17 @@ test("EDT-023,041,042,045: protected facade, atomic roof experiment and stale pl
   await page.getByRole("button", { name: "Select Facade", exact: true }).click();
   await expect(page.getByRole("button", { name: "Apply rigid translation" })).toBeDisabled();
   await page.getByRole("button", { name: "Select Rear roof", exact: true }).click();
-  await page.getByRole("button", { name: "Changes · local experiment Open", exact: true }).click();
+  await page
+    .getByRole("button", { name: "More tools · experiments and sample changes Open", exact: true })
+    .click();
   const before = await revision(page);
   await page.getByRole("button", { name: "Preview local edit", exact: true }).click();
   expect(await revision(page)).toBe(before);
-  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Build", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Current", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -155,11 +178,15 @@ test("EDT-023,041,042,045: protected facade, atomic roof experiment and stale pl
   );
   await expect(page.locator("canvas")).toHaveAttribute("data-model-revision", before!);
   await page.getByRole("button", { name: "Proposed", exact: true }).click();
-  await page.getByRole("button", { name: "Present", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Build", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Present", exact: true })
+    .click();
+  await expand(page, "Project tools");
+  await expect(
+    page.locator(".editor-project-tools").getByRole("button", { name: "Build", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByText(
       "Choose Current or discard the local experiment before presenting the canonical model.",
@@ -178,18 +205,26 @@ test("EDT-023,041,042,045: protected facade, atomic roof experiment and stale pl
   await page.getByRole("button", { name: "Undo local edit" }).click();
   expect(await revision(page)).toBe(before);
   await page
-    .getByRole("button", { name: "Changes · local experiment Collapse", exact: true })
+    .getByRole("button", {
+      name: "More tools · experiments and sample changes Collapse",
+      exact: true,
+    })
     .click();
   await page.getByText("Precision & inspection", { exact: true }).click();
   await page.getByRole("button", { name: "Open step preview", exact: true }).click();
   await expect(page.getByText(/Step 1 of/)).toBeVisible();
   await page.getByRole("button", { name: "Return to assembled Build", exact: true }).click();
   await expect(page.getByRole("button", { name: "Open step preview", exact: true })).toBeVisible();
+  await expand(page, "View tools");
   await page.getByRole("button", { name: "Exploded view", exact: true }).click();
   await page.screenshot({ path: "artifacts/editor/exploded.png" });
   expect(await revision(page)).toBe(before);
   await expect(page.getByRole("button", { name: "Apply rigid translation" })).toBeDisabled();
-  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Build", exact: true })
+    .click();
   await expect(page.getByRole("button", { name: "Reassemble", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Apply rigid translation" })).toBeEnabled();
 });
@@ -202,8 +237,13 @@ test("EDT-046,048: actual PNG and local project round trip preserve canonical da
   await ready(page);
   await add(page);
   const before = await revision(page);
-  await page.getByRole("button", { name: "Present", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Present", exact: true })
+    .click();
   await page.screenshot({ path: "artifacts/editor/present.png" });
+  await expand(page, "View tools");
   await page.getByText("Export PNG", { exact: true }).click();
   const canvas = page.locator("canvas");
   const cameraBefore = await canvas.getAttribute("data-camera-position");
@@ -220,7 +260,12 @@ test("EDT-046,048: actual PNG and local project round trip preserve canonical da
   expect(await revision(page)).toBe(before);
   await expect(canvas).toHaveAttribute("data-camera-position", cameraBefore!);
   await expect(canvas).toHaveAttribute("data-camera-target", targetBefore!);
-  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Build", exact: true })
+    .click();
+  await expand(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download project file" }).click();
@@ -233,6 +278,7 @@ test("EDT-046,048: actual PNG and local project round trip preserve canonical da
   expect(await revision(page)).toBe(before);
   await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.getByRole("button", { name: "Add Brick 1 × 1", exact: true }).click();
+  await expand(page, "Advanced placement");
   await page.getByRole("button", { name: "Free position", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("2");
@@ -283,9 +329,19 @@ test("EDT-030,036: real rendering screenshot and reflow matrix", async ({ page }
   ]) {
     await page.setViewportSize({ width, height });
     await expect(page.locator("canvas")).toBeVisible();
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
-    ).toBe(true);
+    const layout = await page.evaluate(() => ({
+      fits: document.documentElement.scrollWidth <= window.innerWidth + 1,
+      pageWidth: document.documentElement.scrollWidth,
+      offenders: Array.from(document.querySelectorAll("main *"))
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+        .slice(0, 12)
+        .map((element) => ({
+          tag: element.tagName,
+          className: element.className,
+          right: element.getBoundingClientRect().right,
+        })),
+    }));
+    expect(layout.fits, `Reflow at ${width} × ${height}: ${JSON.stringify(layout)}`).toBe(true);
     await page.screenshot({
       path: `artifacts/editor/build-${width}x${height}.png`,
       fullPage: true,
@@ -294,7 +350,7 @@ test("EDT-030,036: real rendering screenshot and reflow matrix", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Parts & structure", exact: true }).click();
   await page
-    .getByRole("dialog", { name: "Parts & structure", exact: true })
+    .getByRole("complementary", { name: "Parts and structure", exact: true })
     .getByRole("button", { name: "Structure", exact: true })
     .click();
   await page.screenshot({ path: "artifacts/editor/touch-sheet.png", fullPage: true });
@@ -308,9 +364,10 @@ test("EDT-014,015,020,031: real openings, overlay isolation and context recovery
   await page.goto("/editor/?project=blank");
   await ready(page);
   await page.getByRole("button", { name: "Add Stone gate surround", exact: true }).click();
+  await expand(page, "Advanced placement");
   await page.getByRole("button", { name: "Free position", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
-  await page.getByRole("button", { name: "Front view", exact: true }).click();
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("front");
   await page.getByRole("button", { name: "Fit selection", exact: true }).click();
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
@@ -318,6 +375,7 @@ test("EDT-014,015,020,031: real openings, overlay isolation and context recovery
   await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.getByRole("button", { name: "Add Brick 2 × 2", exact: true }).click();
   const before = await revision(page);
+  await expand(page, "Project tools");
   await page.getByRole("button", { name: "Shortcuts", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Editor shortcuts" })
@@ -345,7 +403,12 @@ test("EDT-047: an actual rendered PNG encoding failure restores the editor", asy
   await ready(page);
   await add(page);
   const before = await revision(page);
-  await page.getByRole("button", { name: "Present", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Present", exact: true })
+    .click();
+  await expand(page, "View tools");
   await page.getByText("Export PNG", { exact: true }).click();
   // Failure injection affects encoding once; WebGL rendering and readback remain real.
   await page.evaluate(() => {
@@ -358,7 +421,11 @@ test("EDT-047: an actual rendered PNG encoding failure restores the editor", asy
   await page.getByRole("button", { name: "Download PNG", exact: true }).click();
   await expect(page.getByText("PNG encoding failed. The model is unchanged.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Download PNG", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Build", exact: true }).click();
+  await expand(page, "Project tools");
+  await page
+    .locator(".editor-project-tools")
+    .getByRole("button", { name: "Build", exact: true })
+    .click();
   await page.getByRole("button", { name: "Rotate 90°", exact: true }).click();
   expect(await revision(page)).not.toBe(before);
   await expect(page.locator("canvas")).toHaveAttribute("data-part-count", "1");

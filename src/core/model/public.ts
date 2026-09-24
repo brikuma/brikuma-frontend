@@ -7,6 +7,12 @@ export {
   fromLDrawPoint,
 } from "./domain/model";
 export {
+  STUD_PITCH_CM,
+  studsToCentimeters,
+  centimetersToStuds,
+  formatCentimeters,
+} from "./domain/units";
+export {
   deriveBom,
   getSelectionBounds,
   isInstructionCompatible,
@@ -19,6 +25,23 @@ export {
   hasOccupiedStudSpace,
 } from "./domain/connections";
 export type { StudSite, StudContact } from "./domain/connections";
+export { generateBuildPlan, getBuildLayers, isBuildPlanCurrent } from "./domain/build-plan";
+export type { BuildLayer, DraftBuildPlan, DraftBuildStep } from "./domain/build-plan";
+export {
+  getReceivingSlopeProfile,
+  framedDoorMaterial,
+  NOMINAL_SIDE_CLEARANCE,
+  NOMINAL_VERTICAL_CLEARANCE,
+} from "./domain/nominal-geometry";
+export { assessAttachments } from "./domain/attachment-status";
+export { createArchitecturePreview } from "./application/architecture-preview";
+export type { ArchitecturePreview } from "./application/architecture-preview";
+export type { ArchitectureRequest, ArchitectureSection } from "./domain/architecture-layout";
+export type {
+  AttachmentStatus,
+  InstanceAttachment,
+  AttachmentAssessment,
+} from "./domain/attachment-status";
 export { applyCommand, createSession, previewVariant, redo, undo } from "./application/commands";
 export {
   diagnosePlacement,

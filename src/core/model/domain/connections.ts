@@ -1,4 +1,5 @@
 import type { GridTransform, Model, PartDefinition } from "./types";
+import { getReceivingSlopeProfile, isFramedDoorAssembly } from "./nominal-geometry";
 
 export interface StudSite {
   readonly x: number;
@@ -21,9 +22,8 @@ export function getPartConnections(definition: PartDefinition) {
       definition.studs &&
       definition.width === 2 &&
       definition.depth === 2) ||
-    definition.id === "demo-slope-2x4" ||
-    definition.id === "demo-slope-1x2" ||
-    definition.id === "demo-roof-bed" ||
+    getReceivingSlopeProfile(definition) !== null ||
+    isFramedDoorAssembly(definition) ||
     definition.id === "demo-gate-arch";
   return {
     studs: definition.studs ? grid : [],

@@ -2,6 +2,21 @@ import type { PartDefinition } from "@/core/model/public";
 
 function DetailSilhouette({ part }: { part: PartDefinition }) {
   const { shape, width, height } = part;
+  if (shape === "door-assembly")
+    return (
+      <>
+        <path d="M 34 12 L 39 9 H 70 V 63 L 65 67 H 34 Z" />
+        <path d="M 65 12 L 70 9 V 63 L 65 67 Z" fill="currentColor" fillOpacity="0.12" />
+        <rect x="34" y="12" width="31" height="55" />
+        <rect x="38" y="17" width="23" height="45" fill="currentColor" fillOpacity="0.16" />
+        <path d="M 41 20 H 58 V 59 H 41 Z" fill="none" />
+        <rect x="37" y="25" width="4" height="5" />
+        <rect x="37" y="49" width="4" height="5" />
+        <circle cx="57" cy="41" r="1.7" fill="currentColor" fillOpacity="0.6" />
+        <ellipse cx="43" cy="10" rx="3" ry="1.5" />
+        <ellipse cx="58" cy="10" rx="3" ry="1.5" />
+      </>
+    );
   if (shape === "leaf" || shape === "leaf-upright")
     return (
       <>
@@ -111,6 +126,7 @@ export function PartPreview({ part, color }: { part: PartDefinition; color: stri
       >
         {(
           [
+            "door-assembly",
             "arch",
             "arch-panel",
             "arch-spandrel",

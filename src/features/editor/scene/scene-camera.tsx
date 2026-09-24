@@ -8,6 +8,46 @@ import { partDefinitions } from "@/fixtures/catalog";
 import type { CameraAction, CameraProjection, CameraView, EditorMode } from "../viewport-types";
 import { STUD_HEIGHT } from "./brick-geometry";
 
+/** Fit into the unobscured canvas; the controls are measured in CSS pixels, like Fiber's size. */
+export function calculateCameraFit(
+  span: { x: number; y: number },
+  size: { width: number; height: number },
+  {
+    inspection = false,
+    dimensions = false,
+    zoom = 1,
+  }: { inspection?: boolean; dimensions?: boolean; mode?: EditorMode; zoom?: number } = {},
+) {
+  const width = Math.max(1, size.width);
+  const height = Math.max(1, size.height);
+  // Present retains the same floating controls. Only the separate frozen PNG pass omits them.
+  const top = 104;
+  // Below this width the camera-view and fit/zoom groups occupy two rows.
+  const bottom = width < 520 ? 112 : 80;
+  const gutterScale = Math.min(1, Math.max(0, height - 64) / Math.max(1, top + bottom));
+  const usableHeight = height - (top + bottom) * gutterScale;
+  const horizontalFit =
+    (width * (inspection ? 0.76 : dimensions ? 0.89 : 0.93)) /
+    Math.max(inspection ? 1.5 : 4, span.x);
+  // Inspection labels stay 80 CSS pixels wide; reserve their edge space on narrow screens.
+  const dimensionFit =
+    inspection && dimensions
+      ? Math.max(80, width - 96) / Math.max(1.5, span.x + 0.8)
+      : horizontalFit;
+  const fittedZoom =
+    Math.min(
+      horizontalFit,
+      dimensionFit,
+      Math.min(height * (inspection ? 0.72 : 0.86), usableHeight * 0.96) /
+        Math.max(inspection ? 1.5 : 4, span.y),
+    ) * zoom;
+  return {
+    zoom: fittedZoom,
+    // Raising the target moves the model down into the area below the top controls.
+    targetOffsetY: ((top - bottom) * gutterScale) / (2 * fittedZoom),
+  };
+}
+
 export function modelBounds(
   model: Model,
   hidden: readonly string[],
@@ -196,20 +236,11 @@ export function CameraRig({
     camera.lookAt(center);
     camera.updateMatrixWorld();
     const span = projected.getSize(new Vector3());
-    const horizontalFit =
-      (size.width * (inspection ? 0.76 : dimensions ? 0.89 : 0.93)) /
-      Math.max(inspection ? 1.5 : 4, span.x);
-    // Inspection labels stay 80 CSS pixels wide; reserve their edge space on narrow screens.
-    const dimensionFit =
-      inspection && dimensions
-        ? Math.max(80, size.width - 96) / Math.max(1.5, span.x + 0.8)
-        : horizontalFit;
-    const fittedZoom =
-      Math.min(
-        horizontalFit,
-        dimensionFit,
-        (size.height * (inspection ? 0.72 : 0.86)) / Math.max(inspection ? 1.5 : 4, span.y),
-      ) * zoom;
+    const fit = calculateCameraFit(span, size, { inspection, dimensions, mode, zoom });
+    const fittedZoom = fit.zoom;
+    const targetOffset = new Vector3(0, fit.targetOffsetY, 0).applyQuaternion(camera.quaternion);
+    camera.position.add(targetOffset);
+    center.add(targetOffset);
     if (camera instanceof OrthographicCamera) camera.zoom = fittedZoom;
     else {
       camera.zoom = 1;
@@ -239,6 +270,7 @@ export function CameraRig({
     invalidate,
     inspection,
     model,
+    mode,
     onFit,
     registeredControls,
     sceneId,

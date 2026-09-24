@@ -1,35 +1,76 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, ArrowUpDown, Box, ArrowLeft } from "lucide-react";
 import { useProject } from "@/features/editor/state/session";
-import { deriveBom, missingQuantity } from "@/core/model/public";
+import {
+  assessAttachments,
+  deriveBom,
+  diagnoseModel,
+  missingQuantity,
+  type AttachmentStatus,
+} from "@/core/model/public";
 import { colors, partDefinitions } from "@/fixtures/catalog";
 import { ProjectNavigation } from "@/components/shell/project-navigation";
 import { PageHeading } from "@/components/shell/app-shell";
+
+const attachmentLabels: Record<AttachmentStatus, string> = {
+  "ground-supported": "on ground",
+  "connected-to-ground": "connected to ground",
+  unattached: "without a ground connection",
+  unsupported: "connection not checked",
+};
+
 export function Inventory() {
   const { id, model, invalid, loadError } = useProject();
   const [search, setSearch] = useState("");
   const [color, setColor] = useState("all");
   const [view, setView] = useState("required");
   const [descending, setDescending] = useState(false);
-  if (!model)
+  const assessment = useMemo(() => {
+    if (!model) return null;
+    const attachments = assessAttachments(model, partDefinitions);
+    const diagnostics = diagnoseModel(model, partDefinitions);
+    const conflictingIds = new Set(diagnostics.conflicts.flatMap((conflict) => conflict.ids));
+    const statusById = new Map(attachments.instances.map((instance) => [instance.id, instance]));
+    const reviewIds = new Set(
+      attachments.instances
+        .filter((instance) => instance.status === "unattached" || instance.status === "unsupported")
+        .map((instance) => instance.id),
+    );
+    for (const id of conflictingIds) reviewIds.add(id);
+    const lines = deriveBom(model).map((line) => {
+      const instances = model.instances
+        .filter((instance) => instance.partId === line.partId && instance.colorId === line.colorId)
+        .map((instance) => ({
+          ...statusById.get(instance.id)!,
+          conflict: conflictingIds.has(instance.id),
+        }));
+      return {
+        ...line,
+        instances,
+        review: instances.filter((instance) => reviewIds.has(instance.id)),
+        conflicts: instances.filter((instance) => instance.conflict).length,
+        owned: Math.min(line.quantity, 3),
+        missing: missingQuantity(line.quantity, 3),
+      };
+    });
+    return { attachments, lines, reviewCount: reviewIds.size, conflictCount: conflictingIds.size };
+  }, [model]);
+  if (!model || !assessment)
     return (
       <div className="page-wrap" role="status">
         {loadError || "Opening parts inventory…"}
       </div>
     );
-  const lines = deriveBom(model).map((line) => ({
-    ...line,
-    owned: Math.min(line.quantity, 3),
-    missing: missingQuantity(line.quantity, 3),
-  }));
+  const { lines } = assessment;
   const filtered = lines
     .filter(
       (line) =>
         (color === "all" || line.colorId === color) &&
         (view !== "missing" || line.missing > 0) &&
         (view !== "owned" || line.owned > 0) &&
+        (view !== "review" || line.review.length > 0) &&
         `${line.partId} ${partDefinitions.find((p) => p.id === line.partId)?.name}`
           .toLowerCase()
           .includes(search.toLowerCase()),
@@ -40,8 +81,8 @@ export function Inventory() {
       <ProjectNavigation id={id} active="inventory" />
       <div className="page-wrap">
         <PageHeading
-          eyebrow="Every piece has a place"
-          title="The parts behind your idea"
+          eyebrow="Current model"
+          title="Scene parts and connections"
           description={`${model.title} · ${model.revision}`}
           action={
             <Link href={`/editor/?project=${id}`} className="button">
@@ -53,9 +94,9 @@ export function Inventory() {
         {invalid && <p className="notice mb-4">Unknown project. Showing the courtyard sample.</p>}
         <div className="mb-7 grid grid-cols-3 border-y py-5">
           <div>
-            <p className="eyebrow">Required</p>
+            <p className="eyebrow">Scene quantity</p>
             <p className="mt-2 text-2xl font-semibold tabular-nums" data-testid="inventory-total">
-              {model.instances.length}
+              {model.instances.length}{" "}
               <span className="ml-2 text-xs font-normal text-muted-foreground">pieces</span>
             </p>
           </div>
@@ -64,16 +105,38 @@ export function Inventory() {
             <p className="mt-2 text-2xl font-semibold tabular-nums">{lines.length}</p>
           </div>
           <div className="border-l pl-5">
-            <p className="eyebrow">Missing · example</p>
-            <p className="mt-2 text-2xl font-semibold tabular-nums">
-              {lines.reduce((n, l) => n + l.missing, 0)}
+            <p className="eyebrow">Pieces to review</p>
+            <p
+              className="mt-2 text-2xl font-semibold tabular-nums"
+              data-testid="inventory-review-total"
+            >
+              {assessment.reviewCount}
             </p>
           </div>
         </div>
         <p className="mb-5 text-sm text-muted-foreground">
-          Required quantities come from your current logical model. Owned quantities are
-          illustrative (up to three per row), not your actual collection. Prices and availability
-          are unknown.
+          Scene quantities count every placed part, including unconnected and unverified pieces.
+          These demo parts have no verified manufacturer mapping; this is not a purchase list.
+        </p>
+        <section aria-label="Placement review" className="mb-5 rounded-lg border bg-surface p-4">
+          <h2 className="font-semibold">Placement review</h2>
+          <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {(Object.keys(attachmentLabels) as AttachmentStatus[]).map((status) => (
+              <li key={status}>
+                {assessment.attachments.counts[status]} {attachmentLabels[status]}
+              </li>
+            ))}
+            <li>{assessment.conflictCount} with an overlap conflict</li>
+          </ul>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Connections follow supported nominal contacts to a part on the ground. They do not
+            assess physical stability or manufacturing fit. Overlap conflicts are checked
+            separately. Expand a row to find instance IDs to search in the workbench Structure.
+          </p>
+        </section>
+        <p className="mb-5 text-sm text-muted-foreground">
+          Owned quantities are illustrative (up to three per row), not your actual collection.
+          Prices and availability are unknown.
         </p>
         <div className="mb-5 flex flex-wrap gap-3">
           <label className="flex items-center gap-2 rounded-md border border-control-border bg-surface px-3">
@@ -100,9 +163,10 @@ export function Inventory() {
           <label>
             <span className="sr-only">Inventory view</span>
             <select className="field" value={view} onChange={(e) => setView(e.target.value)}>
-              <option value="required">Required pieces</option>
+              <option value="required">All scene pieces</option>
+              <option value="review">Pieces to review</option>
               <option value="owned">Illustrative owned</option>
-              <option value="missing">Missing pieces</option>
+              <option value="missing">Illustrative missing</option>
             </select>
           </label>
           <button
@@ -117,7 +181,7 @@ export function Inventory() {
         <div className="overflow-x-auto rounded-lg border bg-surface">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">
-              Derived parts inventory for {model.title}, {model.revision}
+              Scene parts and connection review for {model.title}, {model.revision}
             </caption>
             <thead className="border-b bg-surface-muted/60 text-xs text-muted-foreground">
               <tr>
@@ -128,7 +192,10 @@ export function Inventory() {
                   Color
                 </th>
                 <th scope="col" className="p-4 text-right">
-                  Required
+                  In scene
+                </th>
+                <th scope="col" className="p-4">
+                  Placement and connections
                 </th>
                 <th scope="col" className="p-4 text-right">
                   Owned*
@@ -171,6 +238,40 @@ export function Inventory() {
                       </span>
                     </td>
                     <td className="p-4 text-right font-medium tabular-nums">{line.quantity}</td>
+                    <td className="min-w-56 p-4 text-xs">
+                      <ul className="space-y-1">
+                        {(Object.keys(attachmentLabels) as AttachmentStatus[]).map((status) => {
+                          const count = line.instances.filter(
+                            (instance) => instance.status === status,
+                          ).length;
+                          return count ? (
+                            <li key={status}>
+                              {count} {attachmentLabels[status]}
+                            </li>
+                          ) : null;
+                        })}
+                        {line.conflicts > 0 && (
+                          <li className="text-danger">{line.conflicts} with an overlap conflict</li>
+                        )}
+                      </ul>
+                      {line.review.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer py-2 font-medium">
+                            Review {line.review.length}{" "}
+                            {line.review.length === 1 ? "instance" : "instances"}
+                          </summary>
+                          <ul className="mt-1 space-y-2">
+                            {line.review.map((instance) => (
+                              <li key={instance.id} className="break-all">
+                                <span className="font-mono">{instance.id}</span>:{" "}
+                                {attachmentLabels[instance.status]}
+                                {instance.conflict && " · overlap conflict"}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </td>
                     <td className="p-4 text-right tabular-nums text-muted-foreground">
                       {line.owned}
                     </td>

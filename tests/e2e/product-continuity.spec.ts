@@ -1,3 +1,4 @@
+import { openDetails, openInspector } from "./editor-controls";
 import { expect, test, type Page } from "@playwright/test";
 import counts from "../../src/fixtures/scene-counts.json";
 import { variant } from "../../src/fixtures/scenes/masseria";
@@ -60,6 +61,7 @@ test("Product continuity: brief, references and declared scale follow the editab
   await expect(page.getByRole("img", { name: referenceImage.name, exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Return to workbench", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
+  await page.getByRole("button", { name: /More tools · experiments/ }).click();
   await expect(page.getByRole("region", { name: "Assisted design preview" })).toContainText(
     "No pre-authored change is available for this model. AI is not connected.",
   );
@@ -97,7 +99,8 @@ test("Product continuity: brief, references and declared scale follow the editab
   await expect(page.getByTestId("inventory-total")).toContainText("1");
   await expect(page.getByRole("rowheader").filter({ hasText: "demo-brick-2x4" })).toBeVisible();
   await navigateProject(page, "Instructions");
-  await expect(page.getByText(/Instruction generation is not connected/)).toBeVisible();
+  await page.getByRole("button", { name: "Generate instructions", exact: true }).click();
+  await expect(page.getByText(/Local instruction draft · 1 piece/)).toBeVisible();
   await navigateProject(page, "Workbench");
   await expect(workbench(page)).toHaveAttribute("data-count", "1");
   await expect(workbench(page)).toHaveAttribute("data-revision", modelRevision!);
@@ -146,6 +149,7 @@ test("Product continuity: the assisted sample is reviewable, reversible and cann
   await introduction.getByRole("link", { name: "Preview the sample", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
   const originalRevision = await workbench(page).getAttribute("data-revision");
+  await page.getByRole("button", { name: /More tools · experiments/ }).click();
   await page.getByRole("button", { name: "Preview sample change", exact: true }).click();
   const comparison = page.getByRole("dialog", { name: variant.title });
   await expect(comparison).toContainText("A pre-authored example, not AI generation");
@@ -156,6 +160,7 @@ test("Product continuity: the assisted sample is reviewable, reversible and cann
   await expect(comparison).toHaveCount(0);
   const changedCount = counts.masseria - variant.removeIds.length + variant.additions.length;
   await expect(page.getByTestId("piece-count")).toHaveText(String(changedCount));
+  await openInspector(page);
   await page
     .getByRole("combobox", { name: "Choose a logical part" })
     .selectOption("simple-roof-0-0");
@@ -182,10 +187,13 @@ test("Product continuity: the assisted sample is reviewable, reversible and cann
   await page.getByRole("button", { name: "Structure", exact: true }).click();
   await page.getByRole("button", { name: "Select Facade", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Selection color", exact: true })).toBeDisabled();
+  await openInspector(page);
   await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-bed-0--1");
+  await openDetails(page, "Advanced position");
   await page.getByRole("button", { name: "Move x positive", exact: true }).click();
   const editedRevision = await workbench(page).getAttribute("data-revision");
   expect(editedRevision).not.toBe(originalRevision);
+  await page.getByRole("button", { name: /More tools · experiments/ }).click();
   await page.getByRole("button", { name: "Preview sample change", exact: true }).click();
   await expect(comparison.getByRole("alert")).toContainText("Revision conflict");
   await expect(
@@ -257,6 +265,7 @@ test("Product continuity: metadata-only work survives reset and cancelled replac
   await expect(workbench(page)).toHaveAttribute("data-count", "0");
   const blankRevision = await workbench(page).getAttribute("data-revision");
   await openReferences(page);
+  await openDetails(page, "Project tools");
   await page.getByRole("button", { name: "Reset demo", exact: true }).click();
   await page
     .getByRole("dialog", { name: "Reset this demo?" })
@@ -295,6 +304,7 @@ test("Product continuity: metadata-only work survives reset and cancelled replac
       }),
     ),
   };
+  await openDetails(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   const files = page.getByRole("dialog", { name: "Local project files", exact: true });
   await expect(files).toContainText("Downloads preserve geometry and stable part IDs");
@@ -308,6 +318,7 @@ test("Product continuity: metadata-only work survives reset and cancelled replac
   await expect(
     references(page).getByRole("img", { name: `Pinned reference: ${referenceImage.name}` }),
   ).toBeVisible();
+  await openDetails(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   await files.getByLabel("Load project file", { exact: true }).setInputFiles(importedFile);
   await replacement.getByRole("button", { name: "Replace with file", exact: true }).click();

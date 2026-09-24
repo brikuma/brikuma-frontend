@@ -8,7 +8,7 @@ Status: Specified
 
 Baseline: execution brief 1.1.0 / consolidated product v0.0.3, 2026-09-24.
 
-The current visual language is a compact professional design workspace: neutral light-gray and white surfaces, graphite text, one restrained indigo accent, quiet separators and a dominant model canvas. The owner's later September 24 review rejected the earlier warm/teal interface as retro; [FE-DEC-011](../DECISIONS.md#fe-dec-011-contemporary-workspace-stud-feedback-and-authored-assemblies) supersedes that interface direction. Model materials retain their own colors. Avoid official brand packaging, toy-shop primaries, neon, glass, decorative analytics and oversized marketing headings.
+The owner’s latest reference establishes a quiet general-purpose brick workspace: white and light neutral surfaces, graphite text, restrained deep-green accents, compact floating editing/camera tools and a dominant model canvas. [FE-DEC-015](../DECISIONS.md#fe-dec-015-general-purpose-workspace-and-local-instruction-drafts) supersedes the earlier indigo and warm editor palettes. The reference house is a test subject, not a restriction to architecture. Model materials have a separate palette, including red, blue, yellow, orange, black, gray and rose for general objects alongside pale masonry, terracotta and foliage/trim colors. Avoid official brand packaging, toy-shop primaries, neon, decorative analytics and oversized headings.
 
 ## Semantic tokens
 
@@ -16,12 +16,12 @@ The current visual language is a compact professional design workspace: neutral 
 
 | Token                                        | Specified value                   |
 | -------------------------------------------- | --------------------------------- |
-| background / surface / surface-muted         | `#F5F6F8` / `#FFFFFF` / `#EEF0F4` |
-| foreground / muted-foreground                | `#20212B` / `#626775`             |
-| border / control-border                      | `#E2E5EB` / `#858C9A`             |
-| primary / primary-hover / primary-foreground | `#5550D8` / `#4440BD` / `#FFFFFF` |
-| primary-muted / selection                    | `#EEEDFC` / `#6960E8`             |
-| accent / accent-foreground                   | `#5550D8` / `#4944BD`             |
+| background / surface / surface-muted         | `#F7F8F8` / `#FFFFFF` / `#F0F3F2` |
+| foreground / muted-foreground                | `#263936` / `#61716D`             |
+| border / control-border                      | `#DCE3E0` / `#81948C`             |
+| primary / primary-hover / primary-foreground | `#285D50` / `#1D493E` / `#FFFFFF` |
+| primary-muted / selection                    | `#EDF4F1` / `#258979`             |
+| accent / accent-foreground                   | `#285D50` / `#285D50`             |
 | warning / warning-muted                      | `#955B00` / `#FFF1DA`             |
 | success / success-muted                      | `#176844` / `#E5F2E9`             |
 | danger / danger-muted                        | `#B33B3B` / `#FCECEC`             |
@@ -34,7 +34,7 @@ Use the platform system-sans stack without a downloaded font dependency. Prefer 
 
 Spacing uses 4/8/12/16/24/32/48px rhythm. Compact buttons and icon controls are 36px; canvas icons are 32px and form fields default to 40px. Important touch actions aim at least 44px; smaller controls retain the applicable 24px minimum target and sufficient spacing. Radii are 4/6/10px. Use small consistent shadows and restrained floating tools, rather than oversized pill cards. Motion lasts around 120–180ms and respects reduced motion; no perpetual decorative animation.
 
-The shared header is 48px and the desktop navigation rail 56px. Project navigation is a compact segmented control. The desktop workbench uses 232px/256px left/right panels, growing to 248px/272px on wide screens, with collapsible panels and independent scrolling. The home page is a project library with equal blank-canvas and brief entries, working search/category filters and lightweight model cards. Responsive geometry is owned by [responsive/accessibility](RESPONSIVE_ACCESSIBILITY.md).
+The shared header is 48px and the desktop navigation rail 56px. Project navigation is a compact segmented control. The desktop workbench defaults to a 256px parts panel and a collapsed 280px inspector, which opens on selection. Panels remain collapsible, resizable through presets and independently scrollable. The home page is a project library with equal blank-canvas and brief entries, working search/category filters and lightweight model cards. Responsive geometry is owned by [responsive/accessibility](RESPONSIVE_ACCESSIBILITY.md).
 
 Use Grid/Flex, `min-w-0`, `min-h-0`, `dvh` and container queries. Complete utility names stay statically discoverable. Dynamic part colors/panel widths use validated CSS custom properties. Keep custom CSS for specific geometry/print needs.
 
@@ -42,7 +42,7 @@ Related: [component contracts](COMPONENTS.md), [responsive/accessibility](RESPON
 
 ## Studio revision visual target
 
-The owner-supplied September 24 references establish the model-quality target: visible masonry seams, recessed openings, layered roofs, convincing vegetation silhouettes, gentle plastic highlights and soft shadows that ground the model. Their earlier warm interface palette is superseded by the current neutral/indigo workspace. These are generated concept images, not evidence of an existing working renderer or physically verified model.
+The owner-supplied September 24 references establish the model-quality target: visible masonry seams, recessed openings, layered roofs, convincing vegetation silhouettes, gentle plastic highlights and soft shadows that ground the model. The latest owner reference also informs the sparse neutral workspace and small floating tool groups. These are generated concept images, not evidence of an existing working renderer or physically verified model.
 
 Use a large, useful viewport with compact tools, quiet side panels and a collapsed optional sample assistant. Model scale and framing must respond to the actual visible bounds. Provide named views, fit controls, optional grid, hover/selection feedback, explicit placement preview/cancel, numeric alternatives to dragging, single-brick underside inspection and authored assembly separation. Building and inspecting take priority over marketing copy or repeated capability notices. The original approximation catalog remains labeled truthfully; supported nominal stud feedback is distinct from physical validation.
 

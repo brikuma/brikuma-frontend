@@ -43,7 +43,7 @@ test("EDT-034,036: active placement and mobile structure have no automated AA vi
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Parts & structure", exact: true }).click();
   await page
-    .getByRole("dialog", { name: "Parts & structure", exact: true })
+    .getByRole("complementary", { name: "Parts and structure", exact: true })
     .getByRole("button", { name: "Structure", exact: true })
     .click();
   const structure = await new AxeBuilder({ page })

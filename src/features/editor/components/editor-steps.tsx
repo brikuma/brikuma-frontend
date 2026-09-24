@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { isInstructionCompatible, type Model } from "@/core/model/public";
+import {
+  generateBuildPlan,
+  isBuildPlanCurrent,
+  isInstructionCompatible,
+  type DraftBuildPlan,
+  type Model,
+} from "@/core/model/public";
+import { partDefinitions } from "@/fixtures/catalog";
 import type { InstructionSample } from "@/fixtures/scene-types";
 import { Button } from "@/components/ui/button";
 
@@ -10,18 +17,39 @@ export type StepView = { visibleIds: readonly string[]; mutedIds: readonly strin
 export function EditorStepPreview({
   model,
   sample,
+  draft,
+  onGenerate,
   onView,
 }: {
   model: Model;
   sample: InstructionSample | null;
+  draft?: DraftBuildPlan;
+  onGenerate?: () => boolean;
   onView: (view: StepView | null) => void;
 }) {
+  const [localDraft, setLocalDraft] = useState<DraftBuildPlan>();
+  const generated = draft ?? localDraft;
+  const [source, setSource] = useState<"generated" | "curated">(
+    draft || !sample ? "generated" : "curated",
+  );
   const [active, setActive] = useState(false);
   const [index, setIndex] = useState(0);
-  const valid = sample !== null && isInstructionCompatible(model, sample.modelRevision);
-  const step = sample?.steps[Math.min(index, sample.steps.length - 1)];
+  const [direction, setDirection] = useState<"build" | "disassemble">("build");
+  const [error, setError] = useState("");
+  const plan = source === "generated" ? generated : sample;
+  const valid =
+    plan !== null &&
+    plan !== undefined &&
+    (source === "generated"
+      ? isBuildPlanCurrent(model, generated!)
+      : isInstructionCompatible(model, sample!.modelRevision));
+  const steps = plan?.steps ?? [];
+  const lastIndex = direction === "build" ? Math.max(0, steps.length - 1) : steps.length;
+  const currentIndex = Math.min(index, lastIndex);
+  const step = steps[direction === "build" ? currentIndex : steps.length - currentIndex - 1];
   const view = useMemo(() => {
-    if (!active || !valid || !step) return null;
+    if (!active || !valid) return null;
+    if (!step) return { visibleIds: [], mutedIds: [] };
     const existing = new Set(model.instances.map((instance) => instance.id));
     const added = new Set(step.newPartIds);
     return {
@@ -33,50 +61,126 @@ export function EditorStepPreview({
     onView(view);
   }, [view, onView]);
   useEffect(() => () => onView(null), [onView]);
-  if (!sample?.steps.length)
-    return (
-      <p className="text-xs text-muted-foreground">
-        This scene has no curated step plan. Automatic build-order generation is unavailable.
-      </p>
-    );
+  function generate() {
+    if (onGenerate) {
+      if (!onGenerate()) return;
+    } else {
+      const result = generateBuildPlan(model, partDefinitions);
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      setLocalDraft(result.value);
+    }
+    setError("");
+    setSource("generated");
+    setIndex(0);
+    setDirection("build");
+    setActive(true);
+  }
   return (
-    <section aria-label="Curated step preview" className="space-y-3">
+    <section aria-label="Build and disassembly steps" className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Curated local sequence · {sample.modelRevision}. A visual guide, not a verified build order.
+        Generate a local guide from the pieces you have placed. The draft follows layers from the
+        ground up; it does not verify assembly order or stability.
       </p>
-      {!valid && (
-        <p role="status" className="rounded border border-warning p-2 text-sm">
-          Step plan stale: it describes {sample.modelRevision}; the model is {model.revision}.
-          Restore the matching model revision with Undo or exit the preview.
+      <Button disabled={!model.instances.length} onClick={generate}>
+        {generated ? "Regenerate instructions" : "Generate instructions"}
+      </Button>
+      {!model.instances.length && (
+        <p className="text-xs text-muted-foreground">
+          Add pieces to create your first instruction step.
         </p>
       )}
-      <Button
-        disabled={!valid && !active}
-        aria-pressed={active}
-        onClick={() => setActive((current) => !current)}
-      >
-        {active ? "Exit step preview" : "Open step preview"}
-      </Button>
-      {active && valid && step && (
+      {error && (
+        <p role="alert" className="text-xs">
+          {error}
+        </p>
+      )}
+      {sample && generated && (
+        <label className="block text-xs">
+          Step plan
+          <select
+            className="field mt-1 w-full"
+            value={source}
+            onChange={(event) => {
+              setSource(event.target.value as "generated" | "curated");
+              setIndex(0);
+            }}
+          >
+            <option value="generated">Generated from my model</option>
+            <option value="curated">Original sample sequence</option>
+          </select>
+        </label>
+      )}
+      {plan && (
         <>
-          <p className="text-sm font-medium">
-            Step {Math.min(index, sample.steps.length - 1) + 1} of {sample.steps.length}:{" "}
-            {step.title}
+          <p className="text-xs text-muted-foreground">
+            {source === "generated" ? "Local draft" : "Curated sample"} · {plan.modelRevision} ·{" "}
+            {steps.length} steps
           </p>
-          <p className="text-xs">{step.description}</p>
-          <p className="text-xs">
-            {step.newPartIds.length} added parts · {step.visiblePartIds.length} visible parts
-          </p>
+          {!valid && (
+            <p role="status" className="rounded border border-warning p-2 text-sm">
+              Step plan stale: it describes {plan.modelRevision}; the model is {model.revision}.
+              Regenerate instructions to include your current pieces.
+            </p>
+          )}
+          <Button
+            disabled={!valid && !active}
+            aria-pressed={active}
+            onClick={() => setActive((current) => !current)}
+          >
+            {active ? "Exit step preview" : "Open step preview"}
+          </Button>
+        </>
+      )}
+      {active && valid && (
+        <>
+          <label className="block text-xs">
+            Direction
+            <select
+              className="field mt-1 w-full"
+              value={direction}
+              onChange={(event) => {
+                setDirection(event.target.value as "build" | "disassemble");
+                setIndex(0);
+              }}
+            >
+              <option value="build">Build from the ground up</option>
+              <option value="disassemble">Disassemble from the top down</option>
+            </select>
+          </label>
+          {step ? (
+            <>
+              <p className="text-sm font-medium">
+                Step {currentIndex + 1} of {direction === "build" ? steps.length : steps.length + 1}
+                : {step.title}
+              </p>
+              <p className="text-xs">
+                {direction === "build"
+                  ? step.description
+                  : "Remove the highlighted pieces, then continue to the layer below."}
+              </p>
+              <p className="text-xs">
+                {step.newPartIds.length} {direction === "build" ? "added" : "highlighted"} parts ·{" "}
+                {step.visiblePartIds.length} visible parts
+              </p>
+            </>
+          ) : (
+            <p className="text-sm font-medium">
+              Disassembly preview complete · 0 pieces shown. Your model is unchanged.
+            </p>
+          )}
           <div className="flex gap-2">
             <Button
-              disabled={index <= 0}
+              disabled={currentIndex <= 0}
               onClick={() => setIndex((current) => Math.max(0, current - 1))}
             >
               Previous step
             </Button>
             <Button
-              disabled={index >= sample.steps.length - 1}
-              onClick={() => setIndex((current) => Math.min(sample.steps.length - 1, current + 1))}
+              disabled={currentIndex >= lastIndex}
+              onClick={() => setIndex((current) => Math.min(lastIndex, current + 1))}
             >
               Next step
             </Button>
@@ -85,14 +189,17 @@ export function EditorStepPreview({
             Choose step
             <select
               className="field mt-1 w-full"
-              value={Math.min(index, sample.steps.length - 1)}
+              value={currentIndex}
               onChange={(event) => setIndex(Number(event.target.value))}
             >
-              {sample.steps.map((item, stepIndex) => (
+              {(direction === "build" ? steps : [...steps].reverse()).map((item, stepIndex) => (
                 <option key={item.id} value={stepIndex}>
                   {stepIndex + 1}. {item.title}
                 </option>
               ))}
+              {direction === "disassemble" && (
+                <option value={steps.length}>Complete disassembly</option>
+              )}
             </select>
           </label>
         </>

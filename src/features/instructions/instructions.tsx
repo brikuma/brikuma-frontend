@@ -17,8 +17,11 @@ import { partDefinitions, colors } from "@/fixtures/catalog";
 import { ModelPoster } from "@/components/model-poster";
 import { ProjectNavigation } from "@/components/shell/project-navigation";
 import { Button } from "@/components/ui/button";
+import { GeneratedInstructions } from "./generated-instructions";
 export function Instructions() {
-  const { id, model, entry, invalid, loadError } = useProject();
+  const { id, model, entry, invalid, loadError, draftInstructions, generateInstructions } =
+    useProject();
+  const [showCurated, setShowCurated] = useState(false);
   const [step, setStep] = useState(0);
   const [zoom, setZoom] = useState(1);
   if (!model || !entry)
@@ -28,19 +31,47 @@ export function Instructions() {
       </div>
     );
   const sample = entry.fixture.instructions;
+  if (draftInstructions && !showCurated)
+    return (
+      <GeneratedInstructions
+        id={id}
+        model={model}
+        draft={draftInstructions}
+        onGenerate={generateInstructions}
+        onCurated={sample ? () => setShowCurated(true) : undefined}
+      />
+    );
   if (!sample)
     return (
       <>
         <ProjectNavigation id={id} active="instructions" />
         <div className="page-wrap">
           <BookOpen size={36} className="mb-5 text-primary" />
-          <h1 className="text-2xl">A blank page for a new idea.</h1>
+          <h1 className="text-2xl">Build your model, piece by piece.</h1>
           <p className="my-5 text-muted-foreground">
-            Instruction generation is not connected. Curated instruction samples are available for
-            the three original studies.
+            Generate a local instruction draft from the pieces in your model. The guide shows each
+            layer, highlights new pieces and lists their quantities.
           </p>
-          <Link href="/instructions/?project=masseria" className="button button-primary">
-            View courtyard instructions
+          <Button
+            variant="primary"
+            disabled={!model.instances.length}
+            onClick={() => {
+              generateInstructions();
+              setShowCurated(false);
+            }}
+          >
+            Generate instructions
+          </Button>
+          {!model.instances.length && (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Add pieces in the editor first, then return here to create your guide.
+            </p>
+          )}
+          <Link
+            href={`/editor/?project=${id}`}
+            className="ml-4 text-sm underline underline-offset-4"
+          >
+            Return to editor
           </Link>
         </div>
       </>
@@ -63,10 +94,22 @@ export function Instructions() {
             Model {model.revision} · Instruction sample {sample.revision}
           </p>
         </div>
-        <Button onClick={() => window.print()}>
-          <Printer size={16} />
-          Print layout preview
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="primary"
+            disabled={!model.instances.length}
+            onClick={() => {
+              generateInstructions();
+              setShowCurated(false);
+            }}
+          >
+            Generate from current model
+          </Button>
+          <Button onClick={() => window.print()}>
+            <Printer size={16} />
+            Print layout preview
+          </Button>
+        </div>
       </div>
       {invalid && (
         <p className="notice rounded-none">Unknown project. Showing the courtyard sample.</p>

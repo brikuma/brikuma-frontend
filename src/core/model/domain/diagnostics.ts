@@ -1,7 +1,16 @@
 import { getPartConnections, worldStudSites } from "./connections";
 import type { GridTransform, Model, PartDefinition } from "./types";
+import {
+  framedDoorMaterial,
+  getReceivingSlopeProfile,
+  isFramedDoorAssembly,
+  rectangularShellMaterial,
+  type MaterialBox as Box,
+  type MaterialRing as Ring,
+  type MaterialVolume as Volume,
+} from "./nominal-geometry";
 
-export const DIAGNOSTIC_RULE = "original-rectangular-shell-v1";
+export const DIAGNOSTIC_RULE = "original-building-shell-v2";
 const GEOMETRIC_TOLERANCE = 0.00001;
 
 export interface PlacementDiagnostic {
@@ -9,7 +18,7 @@ export interface PlacementDiagnostic {
   readonly rule: typeof DIAGNOSTIC_RULE;
   readonly modelRevision: string;
   readonly state: "current";
-  readonly coverage: "basic rectangular shell, studs, underside voids, tubes and pins";
+  readonly coverage: "rectangular shells, receiving slopes and framed door assemblies";
   readonly status: "conflict" | "no-conflict" | "not-checked";
   readonly conflictingIds: readonly string[];
   readonly uncheckedIds: readonly string[];
@@ -19,95 +28,68 @@ export interface PlacementDiagnostic {
 
 export function hasSupportedDiagnosticGeometry(part: PartDefinition): boolean {
   return (
-    (part.shape === "brick" || part.shape === "plate") &&
-    Number.isInteger(part.width) &&
-    Number.isInteger(part.depth) &&
-    part.width >= 1 &&
-    part.depth >= 1 &&
-    (part.height === 0.4 || part.height === 1.2)
+    ((part.shape === "brick" || part.shape === "plate") &&
+      Number.isInteger(part.width) &&
+      Number.isInteger(part.depth) &&
+      part.width >= 1 &&
+      part.depth >= 1 &&
+      (part.height === 0.4 || part.height === 1.2)) ||
+    getReceivingSlopeProfile(part) !== null ||
+    isFramedDoorAssembly(part)
   );
 }
 
-type Box = {
-  kind: "box";
-  x: number;
-  z: number;
-  halfX: number;
-  halfZ: number;
-  bottom: number;
-  top: number;
-};
-type Ring = {
-  kind: "ring";
-  x: number;
-  z: number;
-  inner: number;
-  outer: number;
-  bottom: number;
-  top: number;
-};
-type Volume = Box | Ring;
+/** Enclose the exact shell deformation in narrow Z slices, preserving receiver voids.
+ * Slices can conservatively flag near-surface contacts; they never omit shell material.
+ */
+function slopeMaterial(part: PartDefinition, material: Volume[]): Volume[] {
+  const profile = getReceivingSlopeProfile(part);
+  if (!profile) return material;
+  const { height, depth, toe } = profile;
+  const bottom = -height / 2;
+  function warp(y: number, z: number) {
+    const fraction = Math.max(0, Math.min(1, (z + depth / 2) / depth));
+    const localHeight = height + (toe - height) * fraction;
+    return bottom + ((y - bottom) / height) * localHeight;
+  }
+  return material.flatMap((volume): Volume[] => {
+    if (volume.kind === "ring")
+      return [
+        {
+          ...volume,
+          bottom: Math.min(
+            warp(volume.bottom, volume.z - volume.outer),
+            warp(volume.bottom, volume.z + volume.outer),
+          ),
+          top: Math.max(
+            warp(volume.top, volume.z - volume.outer),
+            warp(volume.top, volume.z + volume.outer),
+          ),
+        },
+      ];
+    const slices = Math.max(1, Math.ceil((volume.halfZ * 2) / 0.08));
+    return Array.from({ length: slices }, (_, index): Box => {
+      const start = volume.z - volume.halfZ + (index * volume.halfZ * 2) / slices;
+      const end = volume.z - volume.halfZ + ((index + 1) * volume.halfZ * 2) / slices;
+      return {
+        ...volume,
+        z: (start + end) / 2,
+        halfZ: (end - start) / 2,
+        bottom: Math.min(warp(volume.bottom, start), warp(volume.bottom, end)),
+        top: Math.max(warp(volume.top, start), warp(volume.top, end)),
+      };
+    });
+  });
+}
 
 /** Nominal conservative material volumes independent of tessellation, lighting and visibility. */
 function volumes(part: PartDefinition, transform: GridTransform): Volume[] {
-  const hx = (part.width - 0.035) / 2;
-  const hz = (part.depth - 0.035) / 2;
+  const local: Volume[] = isFramedDoorAssembly(part)
+    ? framedDoorMaterial(part)
+    : slopeMaterial(part, rectangularShellMaterial(part.width, part.height, part.depth));
   const top = (part.height - 0.02) / 2;
-  const bottom = -top;
-  const ceiling = top - 0.12;
-  const wall = 0.18;
-  const local: Volume[] = [
-    { kind: "box", x: 0, z: 0, halfX: hx, halfZ: hz, bottom: ceiling, top },
-    ...[-1, 1].flatMap((side): Box[] => [
-      {
-        kind: "box",
-        x: side * (hx - wall / 2),
-        z: 0,
-        halfX: wall / 2,
-        halfZ: hz,
-        bottom,
-        top: ceiling,
-      },
-      {
-        kind: "box",
-        x: 0,
-        z: side * (hz - wall / 2),
-        halfX: hx - wall,
-        halfZ: wall / 2,
-        bottom,
-        top: ceiling,
-      },
-    ]),
-  ];
   for (const site of getPartConnections(part).studs)
     local.push({ kind: "ring", ...site, inner: 0, outer: 0.3, bottom: top, top: top + 0.2 });
-  if (part.width > 1 && part.depth > 1) {
-    for (let x = 0; x < part.width - 1; x++)
-      for (let z = 0; z < part.depth - 1; z++)
-        local.push({
-          kind: "ring",
-          x: x - (part.width - 2) / 2,
-          z: z - (part.depth - 2) / 2,
-          inner: 0.3,
-          outer: 0.4,
-          bottom: bottom + 0.025,
-          top: ceiling,
-        });
-  } else {
-    const count = Math.max(part.width, part.depth) - 1;
-    for (let n = 0; n < count; n++) {
-      const position = n - (count - 1) / 2;
-      local.push({
-        kind: "ring",
-        x: part.width > 1 ? position : 0,
-        z: part.depth > 1 ? position : 0,
-        inner: 0,
-        outer: 0.195,
-        bottom: bottom + 0.025,
-        top: ceiling,
-      });
-    }
-  }
   return local.map((volume) => {
     const site = worldStudSites([volume], transform)[0];
     return {
@@ -204,7 +186,7 @@ export function diagnosePlacement(
     rule: DIAGNOSTIC_RULE,
     modelRevision: model.revision,
     state: "current",
-    coverage: "basic rectangular shell, studs, underside voids, tubes and pins",
+    coverage: "rectangular shells, receiving slopes and framed door assemblies",
     status: conflictingIds.length
       ? "conflict"
       : !supported || uncheckedIds.length

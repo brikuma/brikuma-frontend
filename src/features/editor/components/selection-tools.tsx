@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   getGroupInstanceIds,
+  centimetersToStuds,
+  formatCentimeters,
   isGroupProtected,
   rotateVector,
   type EditCommand,
@@ -68,7 +70,11 @@ export function SelectionTools({
     (value) => value.trim() !== "" && Number.isFinite(Number(value)),
   );
   function translate() {
-    const vector = { x: Number(delta.x), y: Number(delta.y), z: Number(delta.z) };
+    const vector = {
+      x: centimetersToStuds(Number(delta.x)),
+      y: centimetersToStuds(Number(delta.y)),
+      z: centimetersToStuds(Number(delta.z)),
+    };
     command({
       type: "translate-selection",
       ids,
@@ -150,17 +156,17 @@ export function SelectionTools({
               <p className="text-xs text-muted-foreground">
                 Translation delta
                 <br />
-                stud units
+                centimeters
               </p>
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {(["x", "y", "z"] as const).map((axis) => (
                 <label key={axis} className="text-xs uppercase">
-                  {axis}
+                  {axis} (cm)
                   <input
                     required
                     type="number"
-                    step={axis === "y" ? 0.05 : 0.1}
+                    step={axis === "y" ? 0.04 : 0.08}
                     className="field mt-1 px-2"
                     aria-label={`Selection delta ${axis.toUpperCase()}`}
                     value={delta[axis]}
@@ -191,7 +197,8 @@ export function SelectionTools({
             </select>
           </label>
           <p className="text-xs text-muted-foreground">
-            Pivot: {pivot.x}, {pivot.y}, {pivot.z} studs · Y axis
+            Pivot: {formatCentimeters(pivot.x)}, {formatCentimeters(pivot.y)},{" "}
+            {formatCentimeters(pivot.z)} cm · height axis
           </p>
           <Button
             className="w-full"

@@ -1,3 +1,4 @@
+import { openDetails, openInspector } from "./editor-controls";
 import counts from "../../src/fixtures/scene-counts.json";
 import { expect, test, type Page } from "@playwright/test";
 
@@ -37,7 +38,7 @@ test("FE-006 / EDT-042: protect facade, preview a roof color, accept and undo", 
   await expect(page.getByText("Protected scope: the entire edit is blocked.")).toBeVisible();
   await page.getByRole("button", { name: "Select Roof", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Selection color", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Changes · local experiment" }).click();
+  await page.getByRole("button", { name: "More tools · experiments and sample changes" }).click();
   await page.getByRole("button", { name: "Preview local edit", exact: true }).click();
   await expect(
     page.getByText("Protection check: passed at preview.", { exact: false }),
@@ -64,8 +65,10 @@ test("FE-005 / FE-008 / FE-013: a blank scene remains coherent across navigation
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.getByRole("combobox", { name: "Part color", exact: true }).selectOption("teal");
+  await openDetails(page, "Advanced position");
   await page.getByRole("button", { name: "Move x positive" }).click();
-  await expect(page.getByText("X 1 · Y 0.6 · Z 0", { exact: true })).toBeVisible();
+  await openDetails(page, "Advanced position");
+  await expect(page.getByText("X 0.8 · Y 0.48 · Z 0 cm", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Remove selected part" }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
   await page.getByRole("button", { name: "Undo local edit" }).click();
@@ -78,9 +81,11 @@ test("FE-005 / FE-008 / FE-013: a blank scene remains coherent across navigation
   await page.getByRole("button", { name: "Clear filters" }).click();
   await navigateProject(page, "Workbench");
   await expect(page.getByTestId("piece-count")).toHaveText("1");
+  await openInspector(page);
   await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("added-1");
   await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toHaveValue("teal");
-  await expect(page.getByText("X 1 · Y 0.6 · Z 0", { exact: true })).toBeVisible();
+  await openDetails(page, "Advanced position");
+  await expect(page.getByText("X 0.8 · Y 0.48 · Z 0 cm", { exact: true })).toBeVisible();
 });
 
 test("FE-009: instruction navigation, real drawing zoom and stale revision", async ({ page }) => {
@@ -95,7 +100,9 @@ test("FE-009: instruction navigation, real drawing zoom and stale revision", asy
   const after = await picture.boundingBox();
   expect(after!.width).toBeGreaterThan(before!.width);
   await navigateProject(page, "Workbench");
+  await openInspector(page);
   await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-bed-0--1");
+  await openDetails(page, "Advanced position");
   await page.getByRole("button", { name: "Move x positive" }).click();
   await navigateProject(page, "Instructions");
   await expect(page.getByText(/Instruction sample belongs to the original revision/)).toBeVisible();
@@ -108,16 +115,18 @@ test("Studio: precise placement, rotation and duplication remain reversible acro
   await page.goto("/editor/?project=blank&noWebgl=1");
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
-  await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill("2.5");
+  await openDetails(page, "Advanced placement");
+  await page.getByRole("spinbutton", { name: "Placement X", exact: true }).fill("2");
   await page.getByRole("button", { name: "Free position", exact: true }).click();
   await page.getByRole("button", { name: "Update preview", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
+  await openDetails(page, "Advanced position");
   await page.getByRole("button", { name: "Rotate 90°", exact: true }).click();
   await expect(page.getByText("Rotation 90°", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Duplicate", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("2");
   await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).toHaveValue(
-    "4.5",
+    "3.6",
   );
   await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("1");
@@ -136,7 +145,7 @@ test("EDT-042: a stale local experiment cannot overwrite a later edit", async ({
   await page.goto("/editor/?project=masseria&noWebgl=1");
   await page.getByRole("button", { name: "Structure", exact: true }).click();
   await page.getByRole("button", { name: "Select Roof", exact: true }).click();
-  await page.getByRole("button", { name: "Changes · local experiment" }).click();
+  await page.getByRole("button", { name: "More tools · experiments and sample changes" }).click();
   await page.getByRole("button", { name: "Preview local edit", exact: true }).click();
   await page.getByRole("button", { name: "Current", exact: true }).click();
   await page.getByRole("combobox", { name: "Selection color", exact: true }).selectOption("ochre");
@@ -190,6 +199,7 @@ test("FE-001 / FE-019: static direct routes, unknown query and WebGL fallback", 
   await expect(page.getByText("Unknown project. Showing the courtyard sample.")).toBeVisible();
   await expect(page.getByText(/WebGL is unavailable/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Retry interactive 3D" })).toBeVisible();
+  await openInspector(page);
   await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-bed-0--1");
   await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
   await page.reload();

@@ -26,6 +26,7 @@ import {
 import { ModelPoster } from "@/components/model-poster";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { formatCentimeters } from "@/core/model/public";
 import { partDefinitions, colors } from "@/fixtures/catalog";
 import { placementFeedback } from "../placement-feedback";
 import { createAssemblyView, type AssemblyViewMode } from "../assembly-view";
@@ -89,7 +90,7 @@ export function ModelViewport(props: ModelViewportProps) {
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [exploded, setExploded] = useState(false);
-  const [assemblyMode, setAssemblyMode] = useState<AssemblyViewMode>("modules");
+  const [assemblyMode, setAssemblyMode] = useState<AssemblyViewMode>("layers");
   const [assemblyAmount, setAssemblyAmount] = useState(0.7);
   const assembly = useMemo(
     () =>
@@ -115,10 +116,23 @@ export function ModelViewport(props: ModelViewportProps) {
     setProjectionMode(nextMode);
   }
   const [navigation, setNavigation] = useState<"mouse" | "trackpad" | "touch">("mouse");
+  const [primaryOrbit, setPrimaryOrbit] = useState(false);
+  const effectiveNavigation =
+    primaryOrbit && !placement ? (navigation === "mouse" ? "trackpad" : navigation) : "mouse";
+  function enablePrimaryOrbit() {
+    if (navigation === "mouse")
+      setNavigation(window.matchMedia("(pointer: coarse)").matches ? "touch" : "trackpad");
+    setPrimaryOrbit(true);
+  }
   const [cameraAction, setCameraAction] = useState<CameraAction>();
   const [fitSelection, setFitSelection] = useState(false);
   const [selectThrough, setSelectThrough] = useState(false);
   const [pickCandidates, setPickCandidates] = useState<readonly string[]>([]);
+  const viewTools = useRef<HTMLDetailsElement>(null);
+  const selectThroughChooser = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (selectThrough) selectThroughChooser.current?.focus();
+  }, [selectThrough]);
   const [exportRequest, setExportRequest] = useState<ImageExportRequest | null>(null);
   const [exportSize, setExportSize] = useState<1024 | 2048>(1024);
   const [transparentExport, setTransparentExport] = useState(false);
@@ -176,9 +190,13 @@ export function ModelViewport(props: ModelViewportProps) {
     setExploded(false);
     setRotationPreview(null);
     setTool("select");
+    setPrimaryOrbit(false);
   }
   const [hovered, setHovered] = useState<string | null>(null);
   const selectedPart = model.instances.find((part) => part.id === selected);
+  const selectThroughParts = pickCandidates.length
+    ? pickCandidates.flatMap((id) => model.instances.find((part) => part.id === id) ?? [])
+    : model.instances;
   const inspectionPartId = inspection && selectedPart && !placement ? selectedPart.id : null;
   const editing = Boolean(placement) || tool === "move";
   const workingAxis = props.workplane?.axis ?? "y";
@@ -203,7 +221,11 @@ export function ModelViewport(props: ModelViewportProps) {
   const loaded = useCallback(() => setReady(true), []);
   const placementPart = partDefinitions.find((part) => part.id === placement?.partId);
   const placementColor = colors.find((color) => color.id === placement?.colorId);
-  const feedback = placement ? placementFeedback(model, partDefinitions, placement) : null;
+  const feedback = placement
+    ? props.awaitingNextPosition
+      ? { kind: "waiting", message: "Placed. Choose the next position for another copy." }
+      : placementFeedback(model, partDefinitions, placement)
+    : null;
   const editingLocked = Boolean(inspection || exploded || props.section || exportRequest);
   const readOnlyMode = props.mode !== undefined && props.mode !== "build";
   if (readOnlyMode && tool !== "select") {
@@ -219,6 +241,7 @@ export function ModelViewport(props: ModelViewportProps) {
     if (props.toolRequest.tool === "select" || (!readOnlyMode && !editingLocked && !placement)) {
       setTool(props.toolRequest.tool);
       setRotationPreview(null);
+      setPrimaryOrbit(false);
     }
   }
   useEffect(() => {
@@ -239,14 +262,26 @@ export function ModelViewport(props: ModelViewportProps) {
   if (placement && exploded) setExploded(false);
   if (inspection && (placement || !selectedPart)) {
     setInspection(false);
+    setPrimaryOrbit(false);
     setFitRequest((n) => n + 1);
     setZoom(1);
   }
   function exitInspection() {
     if (!inspection) return;
     setInspection(false);
+    setPrimaryOrbit(false);
     setFitRequest((n) => n + 1);
     setZoom(1);
+  }
+  function beginSelectThrough() {
+    if (viewTools.current) viewTools.current.open = false;
+    onCancelPlacement?.();
+    exitInspection();
+    setTool("select");
+    setRotationPreview(null);
+    setPrimaryOrbit(false);
+    setSelectThrough(true);
+    setPickCandidates([]);
   }
   function openAssembly(mode: AssemblyViewMode) {
     setActive(true);
@@ -259,6 +294,12 @@ export function ModelViewport(props: ModelViewportProps) {
     setFitRequest((n) => n + 1);
     setZoom(1);
   }
+  function closeAssembly() {
+    setExploded(false);
+    setFitRequest((n) => n + 1);
+    setZoom(1);
+  }
+  const needsLiveModel = Boolean(placement) || model.revision !== model.baselineRevision;
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const forced = new URLSearchParams(window.location.search).has("noWebgl");
@@ -266,10 +307,10 @@ export function ModelViewport(props: ModelViewportProps) {
         setFailed(true);
         return;
       }
-      if (window.matchMedia("(min-width: 1024px)").matches) setActive(true);
+      if (needsLiveModel || window.matchMedia("(min-width: 1024px)").matches) setActive(true);
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [needsLiveModel]);
   const fallback = (
     <div className="absolute inset-0 flex flex-col">
       <StaticPreview id={model.id} title={model.title} className="min-h-0 flex-1" />
@@ -355,6 +396,7 @@ export function ModelViewport(props: ModelViewportProps) {
           if (placement) onCancelPlacement?.();
           exitInspection();
           setTool("select");
+          setPrimaryOrbit(false);
           return;
         }
         if (readOnlyMode || exploded || props.section || exportRequest) return;
@@ -365,6 +407,7 @@ export function ModelViewport(props: ModelViewportProps) {
           setRotationPreview(null);
           exitInspection();
           setTool("move");
+          setPrimaryOrbit(false);
           return;
         }
         if (key === "r" && props.onRotate) {
@@ -372,339 +415,15 @@ export function ModelViewport(props: ModelViewportProps) {
           event.stopPropagation();
           exitInspection();
           setTool("rotate");
+          setPrimaryOrbit(false);
         }
       }}
     >
-      <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3 py-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <button
-            className={`button min-h-9 px-2.5 text-xs ${tool === "select" && !placement && !inspection ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
-            aria-label="Select tool"
-            aria-pressed={tool === "select" && !placement && !inspection}
-            onClick={() => {
-              onCancelPlacement?.();
-              exitInspection();
-              setTool("select");
-            }}
-          >
-            <MousePointer2 size={15} /> Select
-          </button>
-          {onMove && (
-            <button
-              className={`button min-h-9 px-2.5 text-xs ${tool === "move" && !placement ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
-              aria-label="Move tool"
-              aria-pressed={tool === "move" && !placement}
-              disabled={
-                exploded ||
-                Boolean(props.section) ||
-                (props.mode !== undefined && props.mode !== "build")
-              }
-              title={
-                exploded
-                  ? "Close exploded view to move parts"
-                  : "Drag a part on the horizontal grid"
-              }
-              onClick={() => {
-                onCancelPlacement?.();
-                exitInspection();
-                setTool("move");
-              }}
-            >
-              <Move size={15} /> Move
-            </button>
-          )}
-          {props.onRotate && (
-            <button
-              className={`button min-h-9 px-2.5 text-xs ${tool === "rotate" ? "bg-primary-muted text-primary" : "border-transparent"}`}
-              aria-label="Rotate tool"
-              aria-pressed={tool === "rotate"}
-              disabled={
-                exploded ||
-                Boolean(props.section) ||
-                (props.mode !== undefined && props.mode !== "build")
-              }
-              onClick={() => {
-                onCancelPlacement?.();
-                exitInspection();
-                setTool("rotate");
-              }}
-            >
-              <RotateCcw size={15} /> Rotate
-            </button>
-          )}
-          <button
-            className={`button min-h-9 px-2.5 text-xs ${inspection ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
-            aria-label="Inspect selected brick"
-            aria-pressed={inspection}
-            disabled={!selectedPart || failed}
-            title={
-              failed
-                ? "Interactive 3D is unavailable"
-                : !selectedPart
-                  ? "Select a brick to inspect its underside"
-                  : inspection
-                    ? "Return to the complete model"
-                    : "Isolate this brick and view its underside"
-            }
-            onClick={() => {
-              if (inspection) {
-                exitInspection();
-                return;
-              }
-              onCancelPlacement?.();
-              setActive(true);
-              setTool("select");
-              setExploded(false);
-              setInspection(true);
-              setFitRequest((n) => n + 1);
-              setZoom(1);
-            }}
-          >
-            <ScanEye size={15} />{" "}
-            <span className={props.compactControls ? "sr-only" : undefined}>Inspect</span>
-          </button>
-        </div>
-        <details open={!props.compactControls} className="min-w-0">
-          <summary
-            className={
-              props.compactControls ? "button min-h-10 cursor-pointer px-3 text-xs" : "hidden"
-            }
-          >
-            View tools
-          </summary>
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
-            <button
-              className={`viewport-icon ${showGrid ? "bg-primary-muted text-primary" : ""}`}
-              aria-label="Show workspace grid"
-              aria-pressed={showGrid}
-              disabled={inspection}
-              title={
-                inspection ? "Exit brick inspection to show the workspace grid" : "Workspace grid"
-              }
-              onClick={() => setShowGrid((value) => !value)}
-            >
-              <Grid2X2 size={17} />
-            </button>
-            {roofAvailable && (
-              <button
-                className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "roof" ? "bg-primary-muted text-primary" : "border-transparent"}`}
-                aria-label="Roof access"
-                disabled={failed}
-                aria-pressed={exploded && assemblyMode === "roof"}
-                title="Lift the complete roof to see inside"
-                onClick={() => openAssembly("roof")}
-              >
-                Roof access
-              </button>
-            )}
-            <button
-              className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "modules" ? "bg-primary-muted text-primary" : "border-transparent"}`}
-              aria-label="Exploded view"
-              aria-pressed={exploded && assemblyMode === "modules"}
-              disabled={failed || !props.assemblyView || !model.instances.length}
-              title={
-                props.assemblyView
-                  ? "Separate complete assembly modules along their guides"
-                  : "No assembly modules are defined for this free-form model"
-              }
-              onClick={() => openAssembly("modules")}
-            >
-              <Layers3 size={15} /> Assembly
-            </button>
-            <label className="text-xs">
-              <span className="sr-only">Render quality</span>
-              <select
-                className="rounded-sm border border-control-border bg-surface px-2 py-1.5"
-                value={quality}
-                onChange={(e) =>
-                  setQuality(
-                    e.target.value === "low"
-                      ? "low"
-                      : e.target.value === "standard"
-                        ? "standard"
-                        : "studio",
-                  )
-                }
-              >
-                <option value="studio">Quality</option>
-                <option value="standard">Auto · conservative</option>
-                <option value="low">Performance</option>
-              </select>
-            </label>
-          </div>
-        </details>
-      </div>
-      <details open={!props.compactControls} className="shrink-0 border-b bg-surface">
-        <summary
-          className={
-            props.compactControls
-              ? "min-h-10 cursor-pointer px-3 py-3 text-xs font-medium"
-              : "hidden"
-          }
-        >
-          Camera &amp; view options
-        </summary>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 bg-surface px-3 py-1.5 text-xs">
-          <label>
-            Projection{" "}
-            <select
-              aria-label="Camera projection"
-              className="min-h-9 rounded border bg-surface px-2"
-              value={projection}
-              onChange={(event) =>
-                setProjection(event.target.value === "perspective" ? "perspective" : "orthographic")
-              }
-            >
-              <option value="orthographic">Orthographic</option>
-              <option value="perspective">Perspective</option>
-            </select>
-          </label>
-          <label>
-            Camera controls{" "}
-            <select
-              aria-label="Camera controls"
-              className="min-h-9 rounded border bg-surface px-2"
-              value={navigation}
-              onChange={(event) =>
-                setNavigation(
-                  event.target.value === "touch"
-                    ? "touch"
-                    : event.target.value === "trackpad"
-                      ? "trackpad"
-                      : "mouse",
-                )
-              }
-            >
-              <option value="mouse">Mouse</option>
-              <option value="trackpad">Trackpad · primary orbit</option>
-              <option value="touch">Touch navigation</option>
-            </select>
-          </label>
-          <details className="relative">
-            <summary className="button min-h-9 cursor-pointer px-2 text-xs">
-              Camera buttons & shortcuts
-            </summary>
-            <div className="absolute left-0 top-full z-20 w-64 max-w-[80vw] rounded border bg-surface p-3 shadow-md">
-              <div className="grid grid-cols-2 gap-1">
-                {(
-                  [
-                    "orbit-left",
-                    "orbit-right",
-                    "pan-left",
-                    "pan-right",
-                    "pan-up",
-                    "pan-down",
-                  ] as const
-                ).map((kind) => (
-                  <button
-                    key={kind}
-                    className="button min-h-10 px-2 text-xs"
-                    onClick={() =>
-                      setCameraAction((previous) => ({ serial: (previous?.serial ?? 0) + 1, kind }))
-                    }
-                  >
-                    {kind.replace("-", " ")}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 leading-5">
-                Right drag: orbit. Middle drag or Space + primary drag: pan. F: fit selection. V:
-                select. G: move. R: rotate the placement or select Rotate. 0/1/2/3:
-                isometric/front/right/top views. Escape: cancel the current action. Shortcuts apply
-                inside the viewport.
-              </p>
-            </div>
-          </details>
-          <button
-            className="button min-h-9 px-2 text-xs"
-            aria-pressed={selectThrough}
-            onClick={() => {
-              setSelectThrough((value) => !value);
-              setPickCandidates([]);
-            }}
-          >
-            Select through
-          </button>
-          {props.mode === "present" && (
-            <label>
-              Stage{" "}
-              <select
-                aria-label="Presentation preset"
-                className="min-h-9 rounded border bg-surface px-2"
-                value={presentationPreset}
-                onChange={(event) => {
-                  const value =
-                    event.target.value === "warm"
-                      ? "warm"
-                      : event.target.value === "transparent"
-                        ? "transparent"
-                        : "neutral";
-                  setPresentationPreset(value);
-                  setTransparentExport(value === "transparent");
-                }}
-              >
-                <option value="neutral">Neutral studio</option>
-                <option value="warm">Warm tabletop</option>
-                <option value="transparent">Transparent background</option>
-              </select>
-            </label>
-          )}
-          {props.mode === "present" && (
-            <details>
-              <summary className="button min-h-9 cursor-pointer px-2 text-xs">Export PNG</summary>
-              <div className="flex flex-wrap items-center gap-2 py-2">
-                <p>Complete assembled model · square framing · current camera · local download</p>
-                <select
-                  aria-label="PNG size"
-                  className="min-h-9 rounded border bg-surface px-2"
-                  value={exportSize}
-                  onChange={(event) => setExportSize(event.target.value === "2048" ? 2048 : 1024)}
-                >
-                  <option value="1024">1024 × 1024</option>
-                  <option value="2048">2048 × 2048</option>
-                </select>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={transparentExport}
-                    onChange={(event) => setTransparentExport(event.target.checked)}
-                  />{" "}
-                  Transparent background
-                </label>
-                <button
-                  className="button min-h-9 px-2 text-xs"
-                  disabled={!ready || failed || Boolean(exportRequest)}
-                  onClick={() => {
-                    setExportMessage("");
-                    setExportRequest({
-                      serial: Date.now(),
-                      size: exportSize,
-                      transparent: transparentExport,
-                    });
-                  }}
-                >
-                  Download PNG
-                </button>
-                {exportRequest && (
-                  <button
-                    className="button min-h-9 px-2 text-xs"
-                    onClick={() => {
-                      setExportRequest(null);
-                      setExportMessage("Image export cancelled. The model is unchanged.");
-                    }}
-                  >
-                    Cancel export
-                  </button>
-                )}
-                <span aria-live="polite">{exportMessage}</span>
-              </div>
-            </details>
-          )}
-        </div>
-      </details>
       {tool === "rotate" && (!props.mode || props.mode === "build") && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-primary-muted px-3 py-2 text-xs">
-          <span>Rigid rotation · Y axis · pivot: {selected ?? "select a part"}</span>
+          <span>
+            Rotate selection · {selectedPart ? "preview a quarter turn" : "select a part first"}
+          </span>
           <button
             className="button min-h-9 px-2 text-xs"
             disabled={!selected}
@@ -746,7 +465,7 @@ export function ModelViewport(props: ModelViewportProps) {
           <span>
             {rotationPreview
               ? rotationCurrent
-                ? `${rotationPreview}° preview; canonical revision unchanged until Apply`
+                ? `${rotationPreview}° preview · Apply to keep this rotation`
                 : "Selection or revision changed. Choose a new rotation preview."
               : "Choose a quarter-turn preview"}
           </span>
@@ -759,7 +478,19 @@ export function ModelViewport(props: ModelViewportProps) {
         >
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <span className="text-xs font-medium">
-              {assemblyMode === "roof" ? "Roof access" : "Assembly view"}
+              <select
+                aria-label="Disassembly method"
+                className="min-h-9 rounded border bg-surface px-2"
+                value={assemblyMode}
+                onChange={(event) => {
+                  setAssemblyMode(event.target.value as AssemblyViewMode);
+                  setFitRequest((n) => n + 1);
+                }}
+              >
+                {roofAvailable && <option value="roof">Lift the roof</option>}
+                <option value="layers">Separate model layers</option>
+                {props.assemblyView && <option value="modules">Separate assemblies</option>}
+              </select>
             </span>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               Separation
@@ -769,6 +500,7 @@ export function ModelViewport(props: ModelViewportProps) {
                 min="0"
                 max="100"
                 step="1"
+                disabled={!assembly.available}
                 value={Math.round(assemblyAmount * 100)}
                 onChange={(event) => setAssemblyAmount(Number(event.target.value) / 100)}
                 className="w-24 accent-primary"
@@ -779,6 +511,7 @@ export function ModelViewport(props: ModelViewportProps) {
                 aria-label="Assembly separation percent"
                 min="0"
                 max="100"
+                disabled={!assembly.available}
                 value={Math.round(assemblyAmount * 100)}
                 className="min-h-9 w-16 rounded border bg-surface px-2"
                 onChange={(event) => {
@@ -788,25 +521,61 @@ export function ModelViewport(props: ModelViewportProps) {
                 }}
               />
             </label>
-            <button
-              className="text-xs font-medium text-primary"
-              onClick={() => {
-                setExploded(false);
-                setFitRequest((n) => n + 1);
-                setZoom(1);
-              }}
-            >
+            <button className="text-xs font-medium text-primary" onClick={closeAssembly}>
               Reassemble
             </button>
           </div>
           <p className="mt-1 text-center text-xs text-muted-foreground">
-            {assembly.modules.map((module) => module.name).join(" · ")}
+            {assembly.available
+              ? `${assembly.modules.length} sections · original positions shown by guide lines`
+              : assembly.unavailableReason}
           </p>
           {assembly.unassignedPartCount > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
               {assembly.unassignedPartCount} added parts remain in place.
             </p>
           )}
+        </div>
+      )}
+      {placement && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-primary-muted/40 px-3 py-2">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-xs font-medium text-primary">
+              <span
+                className="size-3 shrink-0 rounded-full border border-foreground/20"
+                style={{ backgroundColor: placementColor?.hex }}
+              />
+              Place {placementPart?.name ?? "part"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {placementColor?.name} ·{" "}
+              {placement.target === "ground"
+                ? "Grid"
+                : placement.target === "free"
+                  ? "Free position"
+                  : "Connect"}
+            </p>
+            <p
+              className={`mt-1 text-xs font-medium ${feedback?.kind === "blocked" ? "text-danger" : feedback?.kind === "free" ? "text-warning" : "text-muted-foreground"}`}
+              aria-label="Placement feedback"
+              aria-live="polite"
+            >
+              {feedback?.message}
+            </p>
+            {placementPart && (
+              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                {formatCentimeters(placementPart.width)} × {formatCentimeters(placementPart.depth)}{" "}
+                × {formatCentimeters(placementPart.height)} cm · {placement.transform.rotation}°
+              </p>
+            )}
+          </div>
+          <button
+            className="icon-button shrink-0"
+            aria-label="Cancel canvas placement"
+            onClick={onCancelPlacement}
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
       <div
@@ -843,6 +612,337 @@ export function ModelViewport(props: ModelViewportProps) {
           event.preventDefault();
         }}
       >
+        <div className="viewport-floating-tools pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2">
+          <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-1 rounded-lg border bg-surface/95 p-1 shadow-sm">
+            <button
+              className={`button min-h-9 px-2.5 text-xs ${tool === "select" && !primaryOrbit && !placement && !inspection ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
+              aria-label="Select tool"
+              aria-pressed={tool === "select" && !primaryOrbit && !placement && !inspection}
+              onClick={() => {
+                onCancelPlacement?.();
+                exitInspection();
+                setTool("select");
+                setPrimaryOrbit(false);
+              }}
+            >
+              <MousePointer2 size={15} /> Select
+            </button>
+            {onMove && (
+              <button
+                className={`button min-h-9 px-2.5 text-xs ${tool === "move" && !placement ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
+                aria-label="Move tool"
+                aria-pressed={tool === "move" && !placement}
+                disabled={
+                  exploded ||
+                  Boolean(props.section) ||
+                  (props.mode !== undefined && props.mode !== "build")
+                }
+                title={
+                  exploded
+                    ? "Close exploded view to move parts"
+                    : "Drag a part on the horizontal grid"
+                }
+                onClick={() => {
+                  onCancelPlacement?.();
+                  exitInspection();
+                  setTool("move");
+                  setPrimaryOrbit(false);
+                }}
+              >
+                <Move size={15} /> Move
+              </button>
+            )}
+            {props.onRotate && (
+              <button
+                className={`button min-h-9 px-2.5 text-xs ${tool === "rotate" ? "bg-primary-muted text-primary" : "border-transparent"}`}
+                aria-label="Rotate tool"
+                aria-pressed={tool === "rotate"}
+                disabled={
+                  exploded ||
+                  Boolean(props.section) ||
+                  (props.mode !== undefined && props.mode !== "build")
+                }
+                onClick={() => {
+                  onCancelPlacement?.();
+                  exitInspection();
+                  setTool("rotate");
+                  setPrimaryOrbit(false);
+                }}
+              >
+                <RotateCcw size={15} /> Rotate
+              </button>
+            )}
+          </div>
+          <div className="pointer-events-auto flex items-center gap-1 rounded-lg border bg-surface/95 p-1 shadow-sm">
+            <button
+              className={`button min-h-9 px-2.5 text-xs ${exploded ? "bg-primary-muted text-primary" : "border-transparent"}`}
+              aria-label="Exploded view"
+              aria-pressed={exploded}
+              disabled={failed || !model.instances.length}
+              onClick={() =>
+                exploded ? closeAssembly() : openAssembly(roofAvailable ? "roof" : "layers")
+              }
+            >
+              <Layers3 size={15} />{" "}
+              <span className="hidden sm:inline">{exploded ? "Assemble" : "Disassemble"}</span>
+            </button>
+          </div>
+        </div>
+        <details
+          ref={viewTools}
+          className="viewport-advanced-tools absolute left-3 top-[4.25rem] z-20 max-h-[calc(100%-8rem)] max-w-[calc(100%-1.5rem)] overflow-auto rounded-lg border bg-surface/95 shadow-sm"
+        >
+          <summary
+            className="min-h-9 cursor-pointer px-3 py-2 text-xs text-muted-foreground"
+            onClick={() => {
+              if (!viewTools.current?.open) setSelectThrough(false);
+            }}
+          >
+            View tools
+          </summary>
+          <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
+            <button
+              className={`button min-h-9 px-2.5 text-xs ${inspection ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
+              aria-label="Inspect selected brick"
+              aria-pressed={inspection}
+              disabled={!selectedPart || failed}
+              title={
+                failed
+                  ? "Interactive 3D is unavailable"
+                  : !selectedPart
+                    ? "Select a brick to inspect its underside"
+                    : inspection
+                      ? "Return to the complete model"
+                      : "Isolate this brick and view its underside"
+              }
+              onClick={() => {
+                if (inspection) {
+                  exitInspection();
+                  return;
+                }
+                onCancelPlacement?.();
+                setActive(true);
+                setTool("select");
+                setExploded(false);
+                setInspection(true);
+                enablePrimaryOrbit();
+                setFitRequest((n) => n + 1);
+                setZoom(1);
+              }}
+            >
+              <ScanEye size={15} />{" "}
+              <span className={props.compactControls ? "sr-only" : undefined}>Inspect</span>
+            </button>
+            <button
+              className={`viewport-icon ${showGrid ? "bg-primary-muted text-primary" : ""}`}
+              aria-label="Show workspace grid"
+              aria-pressed={showGrid}
+              disabled={inspection}
+              title={
+                inspection ? "Exit brick inspection to show the workspace grid" : "Workspace grid"
+              }
+              onClick={() => setShowGrid((value) => !value)}
+            >
+              <Grid2X2 size={17} />
+            </button>
+            {roofAvailable && (
+              <button
+                className={`button min-h-8 px-2 text-xs ${exploded && assemblyMode === "roof" ? "bg-primary-muted text-primary" : "border-transparent"}`}
+                aria-label="Roof access"
+                disabled={failed}
+                aria-pressed={exploded && assemblyMode === "roof"}
+                title="Lift the complete roof to see inside"
+                onClick={() => openAssembly("roof")}
+              >
+                Roof access
+              </button>
+            )}
+            <label className="text-xs">
+              <span className="sr-only">Render quality</span>
+              <select
+                className="rounded-sm border border-control-border bg-surface px-2 py-1.5"
+                value={quality}
+                onChange={(e) =>
+                  setQuality(
+                    e.target.value === "low"
+                      ? "low"
+                      : e.target.value === "standard"
+                        ? "standard"
+                        : "studio",
+                  )
+                }
+              >
+                <option value="studio">Quality</option>
+                <option value="standard">Auto · conservative</option>
+                <option value="low">Performance</option>
+              </select>
+            </label>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 bg-surface px-3 py-1.5 text-xs">
+            <label>
+              Projection{" "}
+              <select
+                aria-label="Camera projection"
+                className="min-h-9 rounded border bg-surface px-2"
+                value={projection}
+                onChange={(event) =>
+                  setProjection(
+                    event.target.value === "perspective" ? "perspective" : "orthographic",
+                  )
+                }
+              >
+                <option value="orthographic">Orthographic</option>
+                <option value="perspective">Perspective</option>
+              </select>
+            </label>
+            <label>
+              Navigation device{" "}
+              <select
+                aria-label="Camera controls"
+                className="min-h-9 rounded border bg-surface px-2"
+                value={navigation}
+                onChange={(event) => {
+                  const device =
+                    event.target.value === "touch"
+                      ? "touch"
+                      : event.target.value === "trackpad"
+                        ? "trackpad"
+                        : "mouse";
+                  setNavigation(device);
+                  setPrimaryOrbit(device !== "mouse");
+                  if (device !== "mouse") setTool("select");
+                }}
+              >
+                <option value="mouse">Mouse</option>
+                <option value="trackpad">Trackpad</option>
+                <option value="touch">Touch navigation</option>
+              </select>
+            </label>
+            <details className="relative">
+              <summary className="button min-h-9 cursor-pointer px-2 text-xs">
+                Camera buttons & shortcuts
+              </summary>
+              <div className="max-w-lg rounded border bg-surface p-3">
+                <div className="grid grid-cols-2 gap-1">
+                  {(
+                    [
+                      "orbit-left",
+                      "orbit-right",
+                      "pan-left",
+                      "pan-right",
+                      "pan-up",
+                      "pan-down",
+                    ] as const
+                  ).map((kind) => (
+                    <button
+                      key={kind}
+                      className="button min-h-10 px-2 text-xs"
+                      onClick={() =>
+                        setCameraAction((previous) => ({
+                          serial: (previous?.serial ?? 0) + 1,
+                          kind,
+                        }))
+                      }
+                    >
+                      {kind.replace("-", " ")}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 leading-5">
+                  Right drag: orbit. Middle drag or Space + primary drag: pan. F: fit selection. V:
+                  select. G: move. R: rotate the placement or select Rotate. 0/1/2/3:
+                  isometric/front/right/top views. Escape: cancel the current action. Shortcuts
+                  apply inside the viewport.
+                </p>
+              </div>
+            </details>
+            <button
+              className="button min-h-9 px-2 text-xs"
+              aria-pressed={selectThrough}
+              onClick={() => {
+                if (selectThrough) setSelectThrough(false);
+                else beginSelectThrough();
+              }}
+            >
+              Select through
+            </button>
+            {props.mode === "present" && (
+              <label>
+                Stage{" "}
+                <select
+                  aria-label="Presentation preset"
+                  className="min-h-9 rounded border bg-surface px-2"
+                  value={presentationPreset}
+                  onChange={(event) => {
+                    const value =
+                      event.target.value === "warm"
+                        ? "warm"
+                        : event.target.value === "transparent"
+                          ? "transparent"
+                          : "neutral";
+                    setPresentationPreset(value);
+                    setTransparentExport(value === "transparent");
+                  }}
+                >
+                  <option value="neutral">Neutral studio</option>
+                  <option value="warm">Warm tabletop</option>
+                  <option value="transparent">Transparent background</option>
+                </select>
+              </label>
+            )}
+            {props.mode === "present" && (
+              <details>
+                <summary className="button min-h-9 cursor-pointer px-2 text-xs">Export PNG</summary>
+                <div className="flex flex-wrap items-center gap-2 py-2">
+                  <p>Complete assembled model · square framing · current camera · local download</p>
+                  <select
+                    aria-label="PNG size"
+                    className="min-h-9 rounded border bg-surface px-2"
+                    value={exportSize}
+                    onChange={(event) => setExportSize(event.target.value === "2048" ? 2048 : 1024)}
+                  >
+                    <option value="1024">1024 × 1024</option>
+                    <option value="2048">2048 × 2048</option>
+                  </select>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={transparentExport}
+                      onChange={(event) => setTransparentExport(event.target.checked)}
+                    />{" "}
+                    Transparent background
+                  </label>
+                  <button
+                    className="button min-h-9 px-2 text-xs"
+                    disabled={!ready || failed || Boolean(exportRequest)}
+                    onClick={() => {
+                      setExportMessage("");
+                      setExportRequest({
+                        serial: Date.now(),
+                        size: exportSize,
+                        transparent: transparentExport,
+                      });
+                    }}
+                  >
+                    Download PNG
+                  </button>
+                  {exportRequest && (
+                    <button
+                      className="button min-h-9 px-2 text-xs"
+                      onClick={() => {
+                        setExportRequest(null);
+                        setExportMessage("Image export cancelled. The model is unchanged.");
+                      }}
+                    >
+                      Cancel export
+                    </button>
+                  )}
+                  <span aria-live="polite">{exportMessage}</span>
+                </div>
+              </details>
+            )}
+          </div>
+        </details>
         {failed ? (
           fallback
         ) : active ? (
@@ -862,7 +962,7 @@ export function ModelViewport(props: ModelViewportProps) {
               inspectionPartId={inspectionPartId}
               tool={placement ? "select" : tool}
               projection={projection}
-              navigation={navigation}
+              navigation={effectiveNavigation}
               cameraAction={cameraAction}
               fitSelection={fitSelection}
               selectThrough={selectThrough}
@@ -896,7 +996,7 @@ export function ModelViewport(props: ModelViewportProps) {
           </>
         )}
         {model.instances.length === 0 && !failed && !placement && (
-          <div className="pointer-events-none absolute inset-x-4 top-8 text-center">
+          <div className="pointer-events-none absolute inset-x-4 top-1/3 text-center">
             <h2 className="text-xl">Every idea starts with one brick.</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Choose a part to add it to your workspace.
@@ -904,23 +1004,49 @@ export function ModelViewport(props: ModelViewportProps) {
           </div>
         )}
         {selectThrough && (
-          <div className="absolute left-3 top-16 z-10 max-h-56 max-w-[calc(100%-1.5rem)] overflow-auto rounded border bg-surface p-3 text-xs shadow-md">
+          <div
+            role="region"
+            aria-label="Select through parts"
+            className="absolute left-3 top-28 z-10 max-h-56 max-w-[calc(100%-1.5rem)] overflow-auto rounded border bg-surface p-3 text-xs shadow-md"
+          >
             <p className="mb-2">
-              Select through · click the model for visible surface candidates, nearest first.
+              Click the model to narrow the list to overlapping surfaces, or choose a model part.
             </p>
-            {pickCandidates.map((id, index) => (
-              <button
-                key={id}
-                className="button mb-1 flex min-h-10 w-full justify-start px-2 text-xs"
-                onClick={() => {
-                  props.onSelect(id, props.multiSelect);
+            <label className="mb-2 block">
+              {pickCandidates.length ? "Choose an overlapping part" : "Choose a model part"}
+              <select
+                ref={selectThroughChooser}
+                className="field mt-1 w-full"
+                value=""
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape" || event.defaultPrevented) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSelectThrough(false);
+                  setPickCandidates([]);
+                  viewTools.current?.querySelector("summary")?.focus();
+                }}
+                onChange={(event) => {
+                  props.onSelect(event.target.value, props.multiSelect);
                   setSelectThrough(false);
                   setPickCandidates([]);
                 }}
               >
-                {index + 1}. {id}
-              </button>
-            ))}
+                <option value="" disabled>
+                  Choose a part…
+                </option>
+                {selectThroughParts.map((part) => (
+                  <option key={part.id} value={part.id}>
+                    {partDefinitions.find((definition) => definition.id === part.partId)?.name ??
+                      "Part"}
+                    {" · "}
+                    {colors.find((color) => color.id === part.colorId)?.name ?? part.colorId}
+                    {" · "}
+                    {part.id}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button className="button min-h-9 px-2 text-xs" onClick={() => setSelectThrough(false)}>
               Close select through
             </button>
@@ -947,7 +1073,7 @@ export function ModelViewport(props: ModelViewportProps) {
             <button
               className="button min-h-10 px-3 text-xs"
               onClick={() => {
-                setSelectThrough(true);
+                beginSelectThrough();
                 setContextCommands(false);
               }}
             >
@@ -961,7 +1087,7 @@ export function ModelViewport(props: ModelViewportProps) {
             </button>
           </div>
         </Dialog>
-        <div className="pointer-events-none absolute left-5 top-5 text-xs text-muted-foreground">
+        <div className="pointer-events-none absolute right-4 top-[4.5rem] text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
             {model.instances.length.toLocaleString("en")}{" "}
             {model.instances.length === 1 ? "piece" : "pieces"}
@@ -977,7 +1103,7 @@ export function ModelViewport(props: ModelViewportProps) {
           </span>
         </div>
         {inspection && (
-          <div className="absolute inset-x-4 top-12 mx-auto flex min-h-9 w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-md border border-primary/25 bg-surface/95 px-3 py-1 shadow-sm">
+          <div className="absolute inset-x-4 top-28 mx-auto flex min-h-9 w-fit max-w-[calc(100%-2rem)] items-center gap-2 rounded-md border border-primary/25 bg-surface/95 px-3 py-1 shadow-sm">
             <p className="min-w-0 text-xs text-primary sm:whitespace-nowrap" aria-live="polite">
               Inspecting one brick · drag to view underneath
             </p>
@@ -991,90 +1117,55 @@ export function ModelViewport(props: ModelViewportProps) {
             </button>
           </div>
         )}
-        {placement && (
-          <div className="absolute inset-x-4 top-12 mx-auto flex w-fit max-w-[calc(100%-2rem)] items-center gap-3 rounded-lg border border-primary/25 bg-surface/95 px-4 py-3 shadow-sm">
-            <div className="min-w-0">
-              <p className="flex items-center gap-2 text-xs font-medium text-primary">
-                <span
-                  className="size-3 shrink-0 rounded-full border border-foreground/20"
-                  style={{ backgroundColor: placementColor?.hex }}
-                />
-                Place {placementPart?.name ?? "part"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {placementColor?.name} ·{" "}
-                {placement.target === "ground"
-                  ? "Grid"
-                  : placement.target === "free"
-                    ? "Free position"
-                    : "Connect"}
-              </p>
-              <p
-                className={`mt-1 text-xs font-medium ${feedback?.kind === "blocked" ? "text-danger" : feedback?.kind === "free" ? "text-warning" : "text-muted-foreground"}`}
-                aria-label="Placement feedback"
-                aria-live="polite"
-              >
-                {feedback?.message}
-              </p>
-              {placementPart && (
-                <p className="mt-1 font-mono text-xs text-muted-foreground">
-                  {placementPart.width} × {placementPart.depth} × {placementPart.height} studs ·{" "}
-                  {placement.transform.rotation}°
-                </p>
-              )}
-            </div>
-            <button
-              className="icon-button shrink-0"
-              aria-label="Cancel canvas placement"
-              onClick={onCancelPlacement}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
         {active && !failed && (
-          <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2 sm:inset-x-4 sm:bottom-4">
+          <div className="viewport-floating-camera pointer-events-none absolute inset-x-3 bottom-3 z-10 flex flex-wrap items-center justify-between gap-2">
             <div
-              className="flex max-w-full flex-wrap items-center gap-0.5 rounded-md border border-border/60 bg-surface/95 p-1 shadow-sm"
+              className="pointer-events-auto flex max-w-full flex-wrap items-center gap-0.5 rounded-lg border bg-surface/95 p-1 shadow-sm"
               aria-label="Camera views"
             >
-              {(
-                [
-                  ["iso", "Isometric"],
-                  ["front", "Front"],
-                  ["top", "Top"],
-                  ["right", "Right"],
-                  ["back", "Back"],
-                  ["left", "Left"],
-                  ["bottom", "Bottom"],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  className={`min-h-8 rounded-sm px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-45 ${effectiveView === value ? "bg-primary-muted font-medium text-primary" : "text-muted-foreground hover:bg-background"}`}
-                  aria-label={`${label} view`}
-                  aria-pressed={effectiveView === value}
-                  disabled={editing && grazingView(value)}
-                  title={
-                    editing && (value === "front" || value === "right")
-                      ? placement
-                        ? "Finish or cancel placement to use elevation views"
-                        : "Use Select to view elevations"
-                      : `${label} view`
-                  }
-                  onClick={() => {
-                    setFitSelection(false);
-                    setView(value);
-                    setFitRequest((n) => n + 1);
-                    setZoom(1);
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
+              <select
+                aria-label="Camera view"
+                className="min-h-9 rounded border-0 bg-surface px-2 text-xs"
+                value={effectiveView}
+                onChange={(event) => {
+                  setFitSelection(false);
+                  setView(event.target.value as CameraView);
+                  setFitRequest((n) => n + 1);
+                  setZoom(1);
+                }}
+              >
+                {(
+                  [
+                    ["iso", "Isometric"],
+                    ["front", "Front"],
+                    ["top", "Top"],
+                    ["right", "Right"],
+                    ["back", "Back"],
+                    ["left", "Left"],
+                    ["bottom", "Bottom"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <option key={value} value={value} disabled={editing && grazingView(value)}>
+                    {label} view
+                  </option>
+                ))}
+              </select>
+              <button
+                className={`button min-h-9 px-2 text-xs ${primaryOrbit && !placement ? "border-primary/30 bg-primary-muted text-primary" : "button-quiet"}`}
+                aria-label="Navigate camera"
+                aria-pressed={primaryOrbit && !placement}
+                onClick={() => {
+                  onCancelPlacement?.();
+                  setTool("select");
+                  if (primaryOrbit) setPrimaryOrbit(false);
+                  else enablePrimaryOrbit();
+                }}
+              >
+                <Move size={14} /> Orbit
+              </button>
             </div>
             <div
-              className="flex max-w-full flex-wrap items-center gap-0.5 rounded-md border border-border/60 bg-surface/95 p-1 shadow-sm"
+              className="pointer-events-auto flex max-w-full flex-wrap items-center gap-0.5 rounded-lg border bg-surface/95 p-1 shadow-sm"
               aria-label="View controls"
             >
               <button
@@ -1082,25 +1173,14 @@ export function ModelViewport(props: ModelViewportProps) {
                 aria-label="Show dimensions"
                 aria-pressed={showDimensions}
                 disabled={exploded}
-                title="Dimensions in studs"
+                title="Dimensions in centimeters"
                 onClick={() => setShowDimensions((value) => !value)}
               >
                 <Ruler size={16} />
               </button>
               <span className="mx-1 h-4 border-l" />
               <button
-                className="viewport-icon"
-                aria-label="Reset camera"
-                onClick={() => {
-                  setView("iso");
-                  setFitRequest((n) => n + 1);
-                  setZoom(1);
-                }}
-              >
-                <RotateCcw size={17} />
-              </button>
-              <button
-                className="viewport-icon"
+                className="button button-quiet min-h-9 px-2"
                 aria-label="Fit model to view"
                 title="Fit model"
                 onClick={() => {
@@ -1110,6 +1190,7 @@ export function ModelViewport(props: ModelViewportProps) {
                 }}
               >
                 <Scan size={17} />
+                <span className="text-xs">Fit</span>
               </button>
               <button
                 className="button min-h-9 px-2 text-xs"
@@ -1153,19 +1234,17 @@ export function ModelViewport(props: ModelViewportProps) {
               : placement
                 ? (feedback?.message ?? "Choose a placement")
                 : exploded
-                  ? "Modules stay intact · dashed guides show their original positions"
+                  ? "Sections stay together · Reassemble restores the model"
                   : tool === "move"
-                    ? "Drag a brick to move · ½-stud grid · Height in inspector"
-                    : navigation === "touch"
+                    ? "Drag a part to move it · snaps every 0.4 cm · Escape cancels"
+                    : effectiveNavigation === "touch"
                       ? "One finger orbit · two fingers zoom/pan · tap selects"
-                      : navigation === "trackpad"
-                        ? "Primary drag orbit · right drag orbit · scroll zoom · click selects"
-                        : "Right drag orbit · middle drag pan · scroll zoom · click selects"
+                      : effectiveNavigation === "trackpad"
+                        ? "Drag to orbit · scroll to zoom · click Orbit again to select parts"
+                        : "Click a part to select it · choose Move to reposition · scroll to zoom"
             : "Local model viewer"}
         </span>
-        <span className="hidden 2xl:inline">
-          {hovered ? hovered : "HTML selection in Structure & inspector"}
-        </span>
+        <span className="hidden 2xl:inline">{hovered ? "Part under pointer" : ""}</span>
       </div>
     </section>
   );

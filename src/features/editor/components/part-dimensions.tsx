@@ -1,4 +1,4 @@
-import type { PartDefinition, QuarterTurn } from "@/core/model/public";
+import { formatCentimeters, type PartDefinition, type QuarterTurn } from "@/core/model/public";
 
 export function PartDimensions({
   part,
@@ -20,8 +20,8 @@ export function PartDimensions({
         <div key={name}>
           <dt className="text-muted-foreground">{name}</dt>
           <dd className="mt-0.5 font-mono tabular-nums text-foreground">
-            {value}
-            <span className="ml-1 font-sans text-muted-foreground">st</span>
+            {formatCentimeters(Number(value))}{" "}
+            <span className="font-sans text-muted-foreground">cm</span>
           </dd>
         </div>
       ))}

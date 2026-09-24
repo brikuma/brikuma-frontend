@@ -1,4 +1,9 @@
-import type { Model, PartDefinition, PartInstance } from "@/core/model/public";
+import {
+  getBuildLayers,
+  type Model,
+  type PartDefinition,
+  type PartInstance,
+} from "@/core/model/public";
 import type {
   AssemblyModuleDefinition,
   AssemblyOffset,
@@ -108,6 +113,55 @@ export function createAssemblyView(
     unassignedPartCount: 0,
   });
   if (!model.instances.length) return unavailable("Add parts before inspecting an assembly.");
+  if (mode === "layers") {
+    const draft = getBuildLayers(model, definitions);
+    if (!draft.ok) return unavailable(draft.error.message);
+    const byId = new Map(model.instances.map((part) => [part.id, part]));
+    const catalog = new Map(definitions.map((definition) => [definition.id, definition]));
+    const fullBounds = moduleBounds(model.instances, catalog);
+    if (!fullBounds) return unavailable("Layer separation needs known part dimensions.");
+    if (draft.value.length < 2)
+      return unavailable(
+        "This model has one layer. Add another layer to separate it, or use step preview to inspect its pieces.",
+      );
+    const width = fullBounds.max.x - fullBounds.min.x + 2;
+    const depth = fullBounds.max.z - fullBounds.min.z + 2;
+    const columns = Math.ceil(Math.sqrt(draft.value.length));
+    const modules: AssemblyViewModule[] = [];
+    for (const [index, { partIds }] of draft.value.entries()) {
+      const bounds = moduleBounds(
+        partIds.map((id) => byId.get(id)!),
+        catalog,
+      )!;
+      const offset = {
+        x: (index % columns) * width * scale,
+        y: -bounds.min.y * scale || 0,
+        z: Math.floor(index / columns) * depth * scale,
+      };
+      const anchor = attachmentAnchor(bounds, offset);
+      for (const id of partIds) offsets.set(id, offset);
+      modules.push({
+        id: `layer-${index + 1}`,
+        name: `Layer ${index + 1}`,
+        description: `${partIds.length} pieces share this starting height. Their relative positions are retained.`,
+        partIds,
+        offset,
+        anchor,
+        targetAnchor: { x: anchor.x + offset.x, y: anchor.y + offset.y, z: anchor.z + offset.z },
+        bounds,
+      });
+    }
+    return {
+      mode,
+      amount: scale,
+      available: true,
+      unavailableReason: null,
+      caption: `Layer separation · ${Math.round(scale * 100)}%. ${modules.length} layers from the current model are laid side by side. Follow step preview to build or remove their pieces. Display arrangement, not a verified build order.`,
+      modules,
+      offsets,
+      unassignedPartCount: 0,
+    };
+  }
   if (!metadata) return unavailable("No assembly view is authored for this model.");
   if (metadata.modelId !== model.id || metadata.baselineRevision !== model.baselineRevision)
     return unavailable("The authored assembly view does not match this model's baseline.");

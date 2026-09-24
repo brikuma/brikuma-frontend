@@ -14,10 +14,13 @@ export interface PartDefinition {
   readonly height: number;
   readonly depth: number;
   readonly studs: boolean;
+  /** Authored nominal geometry shared by diagnostics and the renderer, never a physical certificate. */
+  readonly geometryProfile?: "receiving-slope-v1" | "framed-door-v1";
   readonly shape:
     | "brick"
     | "plate"
     | "slope"
+    | "door-assembly"
     | "cylinder"
     | "arch"
     | "arch-panel"

@@ -726,7 +726,7 @@ function SceneContents(props: SceneProps) {
       {hoverPart && !drag && !placement && !inspection && props.mode !== "present" && (
         <PartOutline part={hoverPart} offsets={offsets} color={palette.selection} opacity={0.4} />
       )}
-      {placement && (
+      {placement && !props.awaitingNextPosition && (
         <>
           <PlacementGhost
             placement={placement}

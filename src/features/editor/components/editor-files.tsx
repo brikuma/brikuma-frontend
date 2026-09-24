@@ -16,11 +16,13 @@ export function EditorFiles({
   policy,
   dirty,
   onLoad,
+  onDownloadRequested,
 }: {
   model: Model;
   policy: EditingPolicy;
   dirty: boolean;
   onLoad: (model: Model) => void;
+  onDownloadRequested?: () => void;
 }) {
   const [pending, setPending] = useState<Model | null>(null);
   const [message, setMessage] = useState("");
@@ -56,6 +58,7 @@ export function EditorFiles({
               new Blob([serializeProject(model)], { type: "application/json" }),
               `${model.id}.brikuma.json`,
             );
+            onDownloadRequested?.();
             setMessage(
               `Download requested for ${model.revision}. Keep the file to restore this model.`,
             );

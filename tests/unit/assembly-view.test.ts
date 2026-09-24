@@ -40,6 +40,38 @@ const metadata: AssemblyViewMetadata = {
 };
 
 describe("Authored assembly presentation", () => {
+  it("lays current geometric layers side by side without authored metadata or model mutations", () => {
+    const model = {
+      ...single,
+      instances: [
+        single.instances[0],
+        {
+          ...single.instances[0],
+          id: "upper",
+          transform: { ...single.instances[0].transform, y: 1.8 },
+        },
+      ],
+    };
+    const before = structuredClone(model);
+    const view = createAssemblyView(model, partDefinitions, undefined, "layers", 1);
+    expect(view.available).toBe(true);
+    expect(view.modules.map((layer) => layer.partIds)).toEqual([["example"], ["upper"]]);
+    expect(view.offsets.get("example")).toEqual(ZERO_ASSEMBLY_OFFSET);
+    expect(view.offsets.get("upper")).toEqual({ x: 4, y: expect.closeTo(-1.2), z: 0 });
+    const upper = view.modules[1];
+    expect(upper.bounds.min.x + upper.offset.x).toBeGreaterThan(view.modules[0].bounds.max.x);
+    expect(upper.bounds.min.y + upper.offset.y).toBeCloseTo(0);
+    expect(view.unassignedPartCount).toBe(0);
+    const assembled = createAssemblyView(model, partDefinitions, undefined, "layers", 0);
+    expect(
+      [...assembled.offsets.values()].every(
+        (offset) => offset.x === 0 && offset.y === 0 && offset.z === 0,
+      ),
+    ).toBe(true);
+    expect(model).toEqual(before);
+    expect(createAssemblyView(single, partDefinitions, undefined, "layers").available).toBe(false);
+  });
+
   it("opens only the complete main roof in roof-access mode", () => {
     const view = plan(house, "roof");
     expect(view.available).toBe(true);

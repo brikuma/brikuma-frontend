@@ -235,6 +235,37 @@
 .workbench-shell .viewport-icon {
   min-height: 2.5rem;
 }
+
+/* Compact panels reserve layout space so the model remains available during editing. */
+@media (max-width: 767px) {
+  .workbench-grid[data-compact-panel="true"] {
+    grid-template-rows: auto minmax(16rem, 42dvh);
+  }
+  .workbench-grid[data-compact-panel="true"] .modeling-workspace {
+    grid-row: 1;
+    min-height: min-content;
+  }
+  .compact-editor-panel {
+    grid-row: 2;
+  }
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+  .workbench-grid[data-compact-panel="true"] {
+    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-rows: minmax(0, 1fr);
+    height: max(36rem, calc(100dvh - 20rem));
+    flex: none;
+  }
+  .workbench-grid[data-compact-panel="true"] .modeling-workspace {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .compact-editor-panel {
+    grid-column: 2;
+    grid-row: 1;
+    border-left: 1px solid var(--border);
+  }
+}
 .workbench-shell .viewport-icon {
   min-width: 2.5rem;
 }
@@ -257,5 +288,25 @@
     height: 35rem;
     flex: none;
     grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+/* Floating groups wrap independently and stay within the editing area. */
+.viewport-advanced-tools:not([open]) {
+  max-width: fit-content;
+}
+@media (max-width: 767px) {
+  .viewport-floating-tools .button {
+    gap: 0.3rem;
+    padding-inline: 0.5rem;
+  }
+  .viewport-floating-camera {
+    gap: 0.3rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .editor-project-tools[open] {
+    flex-basis: 100%;
   }
 }

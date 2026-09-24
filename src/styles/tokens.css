@@ -1,18 +1,18 @@
 :root {
-  --background: #f5f6f8;
+  --background: #f7f8f8;
   --surface: #ffffff;
-  --surface-muted: #eef0f4;
-  --foreground: #20212b;
-  --muted-foreground: #626775;
-  --border: #e2e5eb;
-  --control-border: #858c9a;
-  --primary: #5550d8;
-  --primary-hover: #4440bd;
+  --surface-muted: #f0f3f2;
+  --foreground: #263936;
+  --muted-foreground: #61716d;
+  --border: #dce3e0;
+  --control-border: #81948c;
+  --primary: #285d50;
+  --primary-hover: #1d493e;
   --primary-foreground: #ffffff;
-  --primary-muted: #eeedfc;
-  --selection: #6960e8;
-  --accent: #5550d8;
-  --accent-foreground: #4944bd;
+  --primary-muted: #edf4f1;
+  --selection: #258979;
+  --accent: #285d50;
+  --accent-foreground: #285d50;
   --warning: #955b00;
   --warning-muted: #fff1da;
   --success: #176844;
@@ -49,18 +49,9 @@
   --radius-lg: 0.625rem;
 }
 
-/* Editor-only art direction; existing product pages retain their canonical theme. */
+/* The canvas stays neutral so the model's material colors remain the focus. */
 .workbench-shell {
-  --background: #f7f5f0;
-  --surface: #fffefb;
-  --surface-muted: #eeece5;
-  --foreground: #183237;
-  --muted-foreground: #53666b;
-  --primary: #14675f;
-  --primary-hover: #0d514c;
-  --primary-muted: #e4f0ec;
-  --selection: #0f8f88;
-  --accent: #a65f43;
-  --border: #dddad2;
-  --control-border: #82938f;
+  --background: #f6f7f6;
+  --surface: #ffffff;
+  --surface-muted: #f1f4f2;
 }

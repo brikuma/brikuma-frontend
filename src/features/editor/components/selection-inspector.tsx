@@ -1,8 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { LockKeyhole, Move, Trash2, Copy, RotateCw, Plus } from "lucide-react";
 import {
   getPartConnections,
+  hasSupportedDiagnosticGeometry,
+  centimetersToStuds,
+  formatCentimeters,
+  studsToCentimeters,
+  isValidTransform,
   isGroupProtected,
   findStudContacts,
   getSelectionBounds,
@@ -26,38 +31,42 @@ function PositionFields({
   command: (command: EditCommand) => boolean;
 }) {
   const [position, setPosition] = useState({
-    x: String(part.transform.x),
-    y: String(part.transform.y),
-    z: String(part.transform.z),
+    x: formatCentimeters(part.transform.x),
+    y: formatCentimeters(part.transform.y),
+    z: formatCentimeters(part.transform.z),
   });
+  const errorId = useId();
+  const transform = {
+    ...part.transform,
+    x: centimetersToStuds(Number(position.x)),
+    y: centimetersToStuds(Number(position.y)),
+    z: centimetersToStuds(Number(position.z)),
+  };
+  const valid =
+    Object.values(position).every((value) => value.trim() !== "") &&
+    isValidTransform(transform, editPolicy.bounds);
   return (
     <form
+      noValidate
       onSubmit={(event) => {
         event.preventDefault();
-        command({
-          type: "set-transform",
-          id: part.id,
-          transform: {
-            ...part.transform,
-            x: Number(position.x),
-            y: Number(position.y),
-            z: Number(position.z),
-          },
-        });
+        if (valid) command({ type: "set-transform", id: part.id, transform });
       }}
     >
       <div className="grid grid-cols-3 gap-2">
         {(["x", "y", "z"] as const).map((axis) => (
-          <label key={axis} className="text-xs font-medium uppercase text-muted-foreground">
-            {axis}
+          <label key={axis} className="text-xs font-medium text-muted-foreground">
+            {{ x: "Left/right", y: "Height", z: "Front/back" }[axis]} (cm)
             <input
               aria-label={`Position ${axis.toUpperCase()}`}
+              aria-describedby={errorId}
+              aria-invalid={!valid || undefined}
               className="field mt-1 px-2 font-mono tabular-nums"
               type="number"
               required
-              min={axis === "y" ? 0 : -editPolicy.bounds}
-              max={editPolicy.bounds}
-              step={axis === "y" ? 0.05 : 0.1}
+              min={axis === "y" ? 0 : -studsToCentimeters(editPolicy.bounds)}
+              max={studsToCentimeters(editPolicy.bounds)}
+              step={axis === "y" ? 0.04 : 0.08}
               disabled={disabled}
               value={position[axis]}
               onChange={(event) => setPosition({ ...position, [axis]: event.target.value })}
@@ -65,9 +74,9 @@ function PositionFields({
                 if (event.key === "Escape") {
                   event.stopPropagation();
                   setPosition({
-                    x: String(part.transform.x),
-                    y: String(part.transform.y),
-                    z: String(part.transform.z),
+                    x: formatCentimeters(part.transform.x),
+                    y: formatCentimeters(part.transform.y),
+                    z: formatCentimeters(part.transform.z),
                   });
                 }
               }}
@@ -75,7 +84,12 @@ function PositionFields({
           </label>
         ))}
       </div>
-      <Button className="mt-2 w-full" disabled={disabled} type="submit">
+      <p id={errorId} aria-live="polite" className="mt-2 text-xs text-muted-foreground">
+        {valid
+          ? "Center position in cm. X/Z steps: 0.08 cm; height steps: 0.04 cm."
+          : "Use 0.08 cm horizontal steps and 0.04 cm height steps within the workspace."}
+      </p>
+      <Button className="mt-2 w-full" disabled={disabled || !valid} type="submit">
         Apply position
       </Button>
     </form>
@@ -138,7 +152,10 @@ export function SelectionInspector({
             </option>
             {model.instances.map((item) => (
               <option value={item.id} key={item.id}>
-                {item.id} · {item.colorId}
+                {partDefinitions.find((definition) => definition.id === item.partId)?.name ??
+                  item.partId}{" "}
+                · {colors.find((color) => color.id === item.colorId)?.name ?? item.colorId} ·{" "}
+                {item.id}
               </option>
             ))}
           </select>
@@ -159,11 +176,11 @@ export function SelectionInspector({
             )}
             {selectedBounds && (
               <div>
-                <p className="text-xs text-muted-foreground">
-                  Nominal body bounds · W × D × H · studs
-                </p>
+                <p className="text-xs text-muted-foreground">Approximate size · W × D × H · cm</p>
                 <p className="mt-1 text-sm tabular-nums">
-                  {selectedBounds.width} × {selectedBounds.depth} × {selectedBounds.height}
+                  {formatCentimeters(selectedBounds.width)} ×{" "}
+                  {formatCentimeters(selectedBounds.depth)} ×{" "}
+                  {formatCentimeters(selectedBounds.height)} cm
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Studs and presentation offsets excluded.
@@ -198,9 +215,12 @@ export function SelectionInspector({
                 <p className="mt-1 text-xs text-muted-foreground">
                   {group?.name} · {color.name}
                 </p>
-                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
-                  {part.id} · {definition.id}
-                </p>
+                <details className="mt-1 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">Part details</summary>
+                  <p className="break-all">
+                    {part.id} · {definition.id}
+                  </p>
+                </details>
               </div>
             </div>
             <div className="mb-4 border-y py-3">
@@ -215,17 +235,20 @@ export function SelectionInspector({
                 className="mb-4 rounded-md border bg-background p-3"
                 aria-label="Part connectors"
               >
-                <h3 className="text-xs font-medium">Connection points</h3>
-                <p className="mt-2 text-xs text-muted-foreground">
+                <h3 className="text-xs font-medium">Attachment</h3>
+                <details className="mt-2 text-xs text-muted-foreground">
+                  <summary className="cursor-pointer">Connection details</summary>
                   {connections.studs.length} top studs · {connections.receivers.length} underside
                   connection sites
-                </p>
+                </details>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {connections.receivesStuds
-                    ? contacts.length
-                      ? `${contacts.length} studs aligned below this part`
-                      : "No matching studs below · ground or free placement"
-                    : "Detail part · free placement, no stud socket"}
+                  {!hasSupportedDiagnosticGeometry(definition)
+                    ? "Visual detail · no supported attachment"
+                    : contacts.length
+                      ? `Attached at ${contacts.length} connection points`
+                      : Math.abs(part.transform.y - definition.height / 2) < 0.00001
+                        ? "On the floor"
+                        : "No attachment at this position"}
                 </p>
               </section>
             )}
@@ -260,11 +283,12 @@ export function SelectionInspector({
                 onChange={(colorId) => command({ type: "recolor", id: part.id, colorId })}
               />
             </div>
-            <div className="mt-5 border-t pt-4">
-              <h3 className="mb-3 flex items-center gap-2 text-sm">
+            <details className="mt-5 border-t pt-4">
+              <summary className="cursor-pointer text-sm">Advanced position</summary>
+              <h3 className="my-3 flex items-center gap-2 text-sm">
                 <Move size={15} />
                 Position{" "}
-                <span className="ml-auto text-xs font-normal text-muted-foreground">studs</span>
+                <span className="ml-auto text-xs font-normal text-muted-foreground">cm</span>
               </h3>
               <PositionFields
                 key={`${part.id}-${part.transform.x}-${part.transform.y}-${part.transform.z}-${part.transform.rotation}`}
@@ -273,7 +297,8 @@ export function SelectionInspector({
                 command={command}
               />
               <p className="mt-3 font-mono text-xs text-muted-foreground">
-                X {part.transform.x} · Y {part.transform.y} · Z {part.transform.z}
+                X {formatCentimeters(part.transform.x)} · Y {formatCentimeters(part.transform.y)} ·
+                Z {formatCentimeters(part.transform.z)} cm
               </p>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {(["x", "y", "z"] as const).map((axis) => (
@@ -303,7 +328,7 @@ export function SelectionInspector({
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
                 className="px-2 text-xs"

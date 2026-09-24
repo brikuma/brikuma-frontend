@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type KeyboardEvent,
@@ -20,6 +21,7 @@ import {
   Maximize2,
   FolderOpen,
   Keyboard,
+  Download,
 } from "lucide-react";
 import { useProject } from "./state/session";
 import { PartCatalog, type PartCatalogPreferences } from "./components/part-catalog";
@@ -28,6 +30,7 @@ import { Structure } from "./components/structure";
 import { SelectionInspector } from "./components/selection-inspector";
 import { SelectionTools } from "./components/selection-tools";
 import { PlacementControls } from "./components/placement-controls";
+import { ArchitectureBuilder } from "./components/architecture-builder";
 import { ModelViewport } from "./components/model-viewport";
 import {
   EditorFiles,
@@ -43,11 +46,17 @@ import { ProjectBriefSummary } from "@/features/project-brief/brief-summary";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { partDefinitions, editPolicy } from "@/fixtures/catalog";
+import { downloadLocalBlob } from "@/adapters/local-download";
 import {
   getSelectionBounds,
+  studsToCentimeters,
+  centimetersToStuds,
   snapGridTransform,
   getGroupInstanceIds,
   isGroupProtected,
+  hasSupportedDiagnosticGeometry,
+  getPartConnections,
+  serializeProject,
   type EditCommand,
   type GridTransform,
   type Model,
@@ -103,10 +112,14 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   const [hidden, setHidden] = useState<readonly string[]>([]);
   const [focusIds, setFocusIds] = useState<readonly string[] | null>(null);
   const [sheet, setSheet] = useState<"left" | "right" | null>(null);
+  const partsToggle = useRef<HTMLButtonElement>(null);
+  const inspectorToggle = useRef<HTMLButtonElement>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(project.focus !== "roof");
   const [pending, setPending] = useState<PlacementPreview | null>(null);
   const [repeat, setRepeat] = useState(false);
+  const [awaitingNextPosition, setAwaitingNextPosition] = useState(false);
+  const [downloadedModel, setDownloadedModel] = useState<Model | null>(null);
   const [catalogColor, setCatalogColor] = useState("limestone");
   const [catalogPreferences, setCatalogPreferences] = useState<PartCatalogPreferences>({
     search: "",
@@ -125,7 +138,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   const [notice, setNotice] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
   const [fileOpen, setFileOpen] = useState(false);
-  const [hint, setHint] = useState(true);
+  const [hint, setHint] = useState(model.instances.length === 0);
   const [changesOpen, setChangesOpen] = useState(false);
   const [proposal, setProposal] = useState<Model | null>(null);
   const [stepEpoch, setStepEpoch] = useState(0);
@@ -219,13 +232,23 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       setSelectedGroup(null);
     }
     setInspector("Selection");
+    setRightCollapsed(false);
   }
   function cancelPlacement() {
     setPending(null);
+    setAwaitingNextPosition(false);
     if (pending) setNotice("Placement cancelled; model unchanged.");
   }
   function changePlacement(transform: GridTransform) {
+    if (
+      pending &&
+      (Object.keys(transform) as (keyof GridTransform)[]).every(
+        (key) => transform[key] === pending.transform[key],
+      )
+    )
+      return;
     setPending((current) => (current ? { ...current, transform } : null));
+    setAwaitingNextPosition(false);
     setNotice("");
   }
   function choosePart(partId: string, colorId: string) {
@@ -237,10 +260,17 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     if (!definition) return;
     setNotice("");
     setTab("Parts");
+    setAwaitingNextPosition(false);
     setPending({
       partId,
       colorId,
-      target: "ground",
+      target:
+        hasSupportedDiagnosticGeometry(definition) &&
+        getPartConnections(definition).receivers.length > 0
+          ? model.instances.length
+            ? "surface"
+            : "ground"
+          : "free",
       transform: {
         ...snapPlacementCenter({ x: 0, z: 0 }, definition, 0),
         y: definition.height / 2,
@@ -264,6 +294,15 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   }
   function place(transform: GridTransform) {
     if (!pending) return false;
+    if (
+      awaitingNextPosition &&
+      (Object.keys(transform) as (keyof GridTransform)[]).every(
+        (key) => transform[key] === pending.transform[key],
+      )
+    ) {
+      setNotice("Choose a new position before placing another copy.");
+      return false;
+    }
     const group =
       model.groups.find((group) => group.id === validScope) ??
       model.groups.find((group) => !isGroupProtected(model, group.id)) ??
@@ -288,6 +327,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     });
     if (ok) {
       setHidden(hiddenIds);
+      setRightCollapsed(false);
       setSelected([instanceId]);
       setSelectedGroup(null);
       setInspector("Selection");
@@ -297,7 +337,10 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       );
       if (!repeat) {
         setPending(null);
-        setSheet(null);
+        if (sheet) closePanel();
+      } else {
+        setAwaitingNextPosition(true);
+        setNotice("Part placed. Choose the next position for another copy.");
       }
     }
     return ok;
@@ -327,6 +370,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         delta: { x: Math.ceil(bounds.width * 2) / 2, y: 0, z: 0 },
       })
     ) {
+      setRightCollapsed(false);
       setSelected(newIds);
       setSelectedGroup(null);
       setInspector("Selection");
@@ -390,6 +434,11 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       (event.target instanceof HTMLElement && event.target.closest('[role="dialog"]'))
     )
       return;
+    if (event.key === "Escape" && sheet && !pending) {
+      event.preventDefault();
+      closePanel();
+      return;
+    }
     if (
       event.target instanceof HTMLElement &&
       event.target.closest("input,textarea,select,[contenteditable]")
@@ -495,6 +544,25 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       command({ type: "translate-selection", ids: selectionIds, delta: moves[event.key] });
     }
   }
+  function closePanel() {
+    const toggle = sheet === "left" ? partsToggle : inspectorToggle;
+    setSheet(null);
+    toggle.current?.focus();
+  }
+  function downloadProject() {
+    try {
+      downloadLocalBlob(
+        new Blob([serializeProject(model)], { type: "application/json" }),
+        `${model.id}.brikuma.json`,
+      );
+      setDownloadedModel(model);
+      setNotice(
+        "Download requested. Keep the file to restore the geometry; brief and references remain session-only.",
+      );
+    } catch {
+      setNotice("The browser could not create the download. Your model is unchanged.");
+    }
+  }
   const left = (
     <div className="min-h-0">
       <div className="flex border-b px-2">
@@ -518,6 +586,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             model={model}
             hiddenIds={hiddenIds}
             repeat={repeat}
+            awaitingNextPosition={awaitingNextPosition}
             onRepeat={setRepeat}
             onChange={changePlacement}
             onPlace={place}
@@ -528,29 +597,54 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             }}
             onPolicy={(target) => {
               setNotice("");
+              const transform =
+                target === "ground"
+                  ? snapGridTransform(
+                      partDefinitions.find((part) => part.id === pending.partId)!,
+                      pending.transform,
+                    )
+                  : pending.transform;
+              changePlacement(transform);
               setPending((current) =>
                 current
                   ? {
                       ...current,
                       target,
-                      transform:
-                        target === "ground"
-                          ? snapGridTransform(
-                              partDefinitions.find((part) => part.id === current.partId)!,
-                              current.transform,
-                            )
-                          : current.transform,
+                      transform,
                     }
                   : null,
               );
             }}
           />
         )}
-        {tab === "Parts" ? (
+        {tab === "Building templates" ? (
+          <div className="space-y-3">
+            <button className="button button-quiet w-full text-xs" onClick={() => setTab("Parts")}>
+              Back to all pieces
+            </button>
+            <ArchitectureBuilder
+              model={model}
+              policy={editPolicy}
+              disabled={viewLocked || mode !== "build" || Boolean(steps) || Boolean(section)}
+              onPreview={previewModel}
+              onAccept={(preview) => {
+                if (viewLocked || mode !== "build" || steps || section) return false;
+                const accepted = project.acceptExperiment(preview);
+                if (accepted) {
+                  setProposal(null);
+                  setSelected([]);
+                  setSelectedGroup(null);
+                  setFocusRequest((value) => value + 1);
+                  setHint(false);
+                }
+                return accepted;
+              }}
+            />
+          </div>
+        ) : tab === "Parts" ? (
           <>
             <div className="flex items-center justify-between">
               <h2 className="text-base">Parts library</h2>
-              <span className="tag">Original demo</span>
             </div>
             <PartCatalog
               onAdd={choosePart}
@@ -591,6 +685,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               onSelect={select}
               scope={validScope}
               onSelectGroup={(groupId) => {
+                setRightCollapsed(false);
                 setSelected(getGroupInstanceIds(model, groupId));
                 setSelectedGroup(groupId);
                 setInspector("Selection");
@@ -655,6 +750,14 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           </section>
         ) : (
           <>
+            <label className="flex min-h-10 items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={multiSelect}
+                onChange={(event) => setMultiSelect(event.target.checked)}
+              />{" "}
+              Select multiple parts
+            </label>
             <SelectionTools
               model={model}
               ids={selectionIds}
@@ -696,12 +799,19 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
                 onCommand={command}
               />
             )}
+            <EditorStepPreview
+              key={`${model.id}-${stepEpoch}`}
+              model={model}
+              sample={entry.fixture.instructions}
+              draft={project.draftInstructions?.plan}
+              onGenerate={project.generateInstructions}
+              onView={changeStepView}
+            />
             <details>
               <summary className="min-h-10 py-2 text-sm">Precision & inspection</summary>
               <div className="space-y-3 pt-2">
                 <p className="text-xs text-muted-foreground">
-                  Workplane controls constrain the ghost/drag plane. Canonical dimensions are
-                  unchanged.
+                  Choose the surface on which parts move.
                 </p>
                 <label className="block text-xs">
                   Workplane normal
@@ -720,15 +830,18 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
                   </select>
                 </label>
                 <label className="block text-xs">
-                  Workplane offset · studs
+                  Workplane offset · cm
                   <input
                     type="number"
                     className="field mt-1"
-                    step="0.1"
-                    value={workplane.offset}
+                    step="0.08"
+                    value={studsToCentimeters(workplane.offset)}
                     onChange={(e) => {
                       if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber))
-                        setWorkplane({ ...workplane, offset: e.target.valueAsNumber });
+                        setWorkplane({
+                          ...workplane,
+                          offset: centimetersToStuds(e.target.valueAsNumber),
+                        });
                     }}
                   />
                 </label>
@@ -762,15 +875,18 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
                       </select>
                     </label>
                     <label className="block text-xs">
-                      Section offset · studs
+                      Section offset · cm
                       <input
                         className="field mt-1"
                         type="number"
-                        step="0.5"
-                        value={section.offset}
+                        step="0.4"
+                        value={studsToCentimeters(section.offset)}
                         onChange={(e) => {
                           if (e.target.value !== "" && Number.isFinite(e.target.valueAsNumber))
-                            setSection({ ...section, offset: e.target.valueAsNumber });
+                            setSection({
+                              ...section,
+                              offset: centimetersToStuds(e.target.valueAsNumber),
+                            });
                         }}
                       />
                     </label>
@@ -786,12 +902,6 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
                 >
                   Restore step view
                 </Button>
-                <EditorStepPreview
-                  key={`${model.id}-${stepEpoch}`}
-                  model={model}
-                  sample={entry.fixture.instructions}
-                  onView={changeStepView}
-                />
               </div>
             </details>
           </>
@@ -820,23 +930,20 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           <h1 className="truncate text-sm">{model.title}</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {model.instances.length.toLocaleString("en")}{" "}
-            {model.instances.length === 1 ? "part" : "parts"} ·{" "}
-            <span className="font-mono">{model.revision}</span>
+            {model.instances.length === 1 ? "part" : "parts"}
+          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground" aria-label="Local save status">
+            {downloadedModel === model
+              ? "Download requested · check your files"
+              : model.revision !== model.baselineRevision
+                ? "Session changes · no autosave"
+                : "Session only · no autosave"}
           </p>
         </div>
-        <div className="flex rounded-md bg-surface-muted p-1" aria-label="Task modes">
-          {(["build", "inspect", "present"] as const).map((value) => (
-            <button
-              key={value}
-              className="min-h-9 rounded-sm px-3 text-sm capitalize aria-pressed:bg-surface aria-pressed:text-primary aria-pressed:shadow-sm"
-              aria-pressed={mode === value}
-              onClick={() => changeMode(value)}
-            >
-              {value[0].toUpperCase() + value.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
+          <Button onClick={downloadProject} className="mr-2 text-xs">
+            <Download size={15} /> Download project
+          </Button>
           <button
             className="icon-button"
             aria-label="Undo local edit"
@@ -854,45 +961,101 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             <Redo2 size={16} />
           </button>
           <button
-            className="icon-button"
-            aria-label="Local project files"
-            onClick={() => setFileOpen(true)}
-          >
-            <FolderOpen size={16} />
-          </button>
-          <button
-            className="icon-button hidden lg:inline-flex"
-            aria-label="Focus canvas"
-            aria-pressed={leftCollapsed && rightCollapsed}
-            onClick={() => {
-              const value = !(leftCollapsed && rightCollapsed);
-              setLeftCollapsed(value);
-              setRightCollapsed(value);
-            }}
-          >
-            <Maximize2 size={16} />
-          </button>
-          <button
-            className="icon-button hidden lg:inline-flex"
-            aria-label="Toggle parts panel"
-            onClick={() => setLeftCollapsed((value) => !value)}
-          >
-            <PanelLeft size={16} />
-          </button>
-          <button
             className="icon-button hidden xl:inline-flex"
             aria-label="Toggle inspector panel"
             onClick={() => setRightCollapsed((value) => !value)}
           >
             <PanelRight size={16} />
           </button>
-          <button
-            className="icon-button"
-            aria-label="Reset demo"
-            onClick={() => setResetOpen(true)}
-          >
-            <RotateCcw size={16} />
-          </button>
+          <details className="editor-project-tools min-w-0 max-w-full">
+            <summary className="button button-quiet text-xs">Project tools</summary>
+            <div className="flex flex-wrap items-center gap-1 py-2">
+              <div className="flex rounded-md bg-surface-muted p-1" aria-label="Task modes">
+                {(["build", "inspect", "present"] as const).map((value) => (
+                  <button
+                    key={value}
+                    className="min-h-9 rounded-sm px-3 text-sm capitalize aria-pressed:bg-surface aria-pressed:text-primary aria-pressed:shadow-sm"
+                    aria-pressed={mode === value}
+                    onClick={() => changeMode(value)}
+                  >
+                    {value[0].toUpperCase() + value.slice(1)}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="button text-xs"
+                onClick={(event) => {
+                  cancelPlacement();
+                  changeMode("build");
+                  setTab("Building templates");
+                  setLeftCollapsed(false);
+                  if (width < 1024) setSheet("left");
+                  event.currentTarget.closest("details")?.removeAttribute("open");
+                }}
+              >
+                Building templates
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Local project files"
+                onClick={() => setFileOpen(true)}
+              >
+                <FolderOpen size={16} />
+              </button>
+              <button
+                className="icon-button hidden lg:inline-flex"
+                aria-label="Focus canvas"
+                aria-pressed={leftCollapsed && rightCollapsed}
+                onClick={() => {
+                  const value = !(leftCollapsed && rightCollapsed);
+                  setLeftCollapsed(value);
+                  setRightCollapsed(value);
+                }}
+              >
+                <Maximize2 size={16} />
+              </button>
+              <button
+                className="icon-button hidden lg:inline-flex"
+                aria-label="Toggle parts panel"
+                onClick={() => setLeftCollapsed((value) => !value)}
+              >
+                <PanelLeft size={16} />
+              </button>
+
+              <Dialog
+                title="Editor shortcuts"
+                description="Shortcuts apply when the editor owns focus. Text inputs retain normal typing and browser zoom."
+                trigger={
+                  <button className="button-quiet flex min-h-10 items-center gap-1 px-2 text-xs">
+                    <Keyboard size={15} />
+                    Shortcuts
+                  </button>
+                }
+              >
+                <ul className="space-y-2 text-sm">
+                  <li>V / G / R: Select / Move / Rotate tools</li>
+                  <li>F: fit selection or visible model</li>
+                  <li>Shift + click: toggle selection</li>
+                  <li>Arrow keys: move selection 0.4 cm; Shift: 0.8 cm</li>
+                  <li>Page Up / Down: move vertically 0.32 cm</li>
+                  <li>⌘/Ctrl D (or Shift D): duplicate selection and enter Move</li>
+                  <li>⌘/Ctrl A: select visible pieces in the current group scope</li>
+                  <li>P: open parts · H: hide selection · Shift H: show hidden parts</li>
+                  <li>0 / 1 / 2 / 3: Isometric / Front / Right / Top (viewport)</li>
+                  <li>Escape: cancel preview or restore focus view</li>
+                  <li>⌘/Ctrl Z: undo; Shift: redo</li>
+                  <li>Secondary drag: orbit; middle or Space + primary: pan</li>
+                </ul>
+              </Dialog>
+              <button
+                className="icon-button"
+                aria-label="Reset demo"
+                onClick={() => setResetOpen(true)}
+              >
+                <RotateCcw size={16} />
+              </button>
+            </div>
+          </details>
         </div>
       </div>
       {project.invalid && (
@@ -900,7 +1063,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       )}
       {hint && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-background px-3 py-1 text-xs text-muted-foreground">
-          <p>Choose a part → inspect its preview → Place or Escape. Undo is always close by.</p>
+          <p>Choose a piece and place it. Build freely, one connection at a time.</p>
           <button
             className="button-quiet min-h-9 shrink-0 px-2"
             aria-label="Dismiss interaction hint"
@@ -910,71 +1073,46 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           </button>
         </div>
       )}
-      <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3">
-        <div className="flex items-center gap-3">
-          <label className="flex min-h-10 items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={multiSelect}
-              onChange={(e) => setMultiSelect(e.target.checked)}
-            />
-            Multi-select
-          </label>
-          <span className="text-xs text-muted-foreground">{selectionIds.length} selected</span>
-          {hiddenIds.length > 0 && (
-            <button className="button text-xs" onClick={() => setHidden([])}>
-              Show hidden parts ({hiddenIds.length})
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="quiet"
-            className="lg:hidden"
-            onClick={(event) => {
-              event.currentTarget.focus();
-              setSheet("left");
-            }}
-          >
-            Parts & structure
-          </Button>
-          <Button
-            variant="quiet"
-            className="xl:hidden"
-            onClick={(event) => {
-              event.currentTarget.focus();
-              setSheet("right");
-            }}
-          >
-            Inspector
-          </Button>
-          <Dialog
-            title="Editor shortcuts"
-            description="Shortcuts apply when the editor owns focus. Text inputs retain normal typing and browser zoom."
-            trigger={
-              <button className="button-quiet flex min-h-10 items-center gap-1 px-2 text-xs">
-                <Keyboard size={15} />
-                Shortcuts
+      {(width < 1280 || selectionIds.length > 0 || hiddenIds.length > 0) && (
+        <div className="flex min-h-11 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">{selectionIds.length} selected</span>
+            {hiddenIds.length > 0 && (
+              <button className="button text-xs" onClick={() => setHidden([])}>
+                Show hidden parts ({hiddenIds.length})
               </button>
-            }
-          >
-            <ul className="space-y-2 text-sm">
-              <li>V / G / R: Select / Move / Rotate tools</li>
-              <li>F: fit selection or visible model</li>
-              <li>Shift + click: toggle selection</li>
-              <li>Arrow keys: move selection 0.5 stud; Shift: 1 stud</li>
-              <li>Page Up / Down: move vertically 0.4 stud</li>
-              <li>⌘/Ctrl D (or Shift D): duplicate selection and enter Move</li>
-              <li>⌘/Ctrl A: select visible pieces in the current group scope</li>
-              <li>P: open parts · H: hide selection · Shift H: show hidden parts</li>
-              <li>0 / 1 / 2 / 3: Isometric / Front / Right / Top (viewport)</li>
-              <li>Escape: cancel preview or restore focus view</li>
-              <li>⌘/Ctrl Z: undo; Shift: redo</li>
-              <li>Secondary drag: orbit; middle or Space + primary: pan</li>
-            </ul>
-          </Dialog>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              ref={partsToggle}
+              className="button button-quiet lg:hidden"
+              aria-expanded={sheet === "left"}
+              aria-controls="compact-editor-panel"
+              onClick={(event) => {
+                event.currentTarget.focus();
+                setSheet((current) => (current === "left" ? null : "left"));
+              }}
+            >
+              Parts & structure
+            </button>
+            <button
+              type="button"
+              ref={inspectorToggle}
+              className="button button-quiet xl:hidden"
+              aria-expanded={sheet === "right"}
+              aria-controls="compact-editor-panel"
+              onClick={(event) => {
+                event.currentTarget.focus();
+                setSheet((current) => (current === "right" ? null : "right"));
+              }}
+            >
+              Inspector
+            </button>
+          </div>
         </div>
-      </div>
+      )}
       {(focusIds || section || steps) && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-primary-muted px-3 py-1 text-xs">
           <p>
@@ -982,7 +1120,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               ? `Focus lens · ${focusIds.length} ${focusIds.length === 1 ? "piece" : "pieces"}`
               : section
                 ? "Visual section"
-                : "Curated step preview"}{" "}
+                : "Instruction step preview"}{" "}
             · Canonical model unchanged
           </p>
           <Button
@@ -1000,8 +1138,11 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         className="workbench-grid"
         data-left-collapsed={leftCollapsed}
         data-right-collapsed={rightCollapsed}
+        data-compact-panel={
+          (sheet === "right" && width < 1280) || (sheet === "left" && width < 1024)
+        }
       >
-        {width >= 1024 && (
+        {width >= 1024 && !(width < 1280 && sheet === "right") && (
           <aside
             aria-label="Parts and structure"
             className={`hidden min-h-0 overflow-y-auto border-r bg-surface ${leftCollapsed ? "lg:hidden" : "lg:block"}`}
@@ -1010,7 +1151,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           </aside>
         )}
         <div
-          className="flex min-h-0 min-w-0 flex-col"
+          className="modeling-workspace flex min-h-0 min-w-0 flex-col"
           role="region"
           tabIndex={0}
           aria-label="Modeling workspace"
@@ -1042,6 +1183,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             presentationIds={steps?.visibleIds}
             mutedIds={steps?.mutedIds}
             placement={pending}
+            awaitingNextPosition={awaitingNextPosition}
             onPlacementChange={changePlacement}
             onPlace={place}
             onCancelPlacement={cancelPlacement}
@@ -1063,6 +1205,23 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             }
           />
         </div>
+        {((sheet === "left" && width < 1024) || (sheet === "right" && width < 1280)) && (
+          <aside
+            id="compact-editor-panel"
+            aria-label={sheet === "left" ? "Parts and structure" : "Project inspector"}
+            className="compact-editor-panel min-h-0 min-w-0 overflow-y-auto border-t bg-surface"
+          >
+            <div className="flex items-center justify-between border-b px-3">
+              <h2 className="text-sm">
+                {sheet === "left" ? "Parts & structure" : "Project inspector"}
+              </h2>
+              <Button variant="quiet" onClick={closePanel}>
+                Close panel
+              </Button>
+            </div>
+            {sheet === "left" ? left : right}
+          </aside>
+        )}
         {width >= 1280 && (
           <aside
             aria-label="Project inspector"
@@ -1072,30 +1231,30 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           </aside>
         )}
       </div>
-      <AssistantPreview
-        model={model}
-        variant={entry.fixture.variant}
-        command={(value) => {
-          if (!command(value)) return false;
-          setPending(null);
-          setSelected([]);
-          setSelectedGroup(null);
-          setCheckResult(null);
-          clearPresentation();
-          return true;
-        }}
-      />
       <div className="shrink-0 border-t bg-surface">
         <button
           className="flex min-h-10 w-full items-center justify-between px-4 text-left text-xs"
           aria-expanded={changesOpen}
           onClick={() => setChangesOpen((value) => !value)}
         >
-          <span>Changes · local experiment</span>
+          <span>More tools · experiments and sample changes</span>
           <span>{changesOpen ? "Collapse" : "Open"}</span>
         </button>
         {changesOpen && (
           <div className="max-h-64 overflow-y-auto border-t px-4 py-3">
+            <AssistantPreview
+              model={model}
+              variant={entry.fixture.variant}
+              command={(value) => {
+                if (!command(value)) return false;
+                setPending(null);
+                setSelected([]);
+                setSelectedGroup(null);
+                setCheckResult(null);
+                clearPresentation();
+                return true;
+              }}
+            />
             <EditorExperiment
               comparisonResetRequest={stepEpoch}
               model={model}
@@ -1123,24 +1282,6 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           {notice || message || (pending ? "Preview only · Place commits once" : "Ready to build")}
         </p>
       </div>
-      <Dialog
-        sheet
-        open={sheet === "left"}
-        onOpenChange={(open) => setSheet(open ? "left" : null)}
-        title="Parts & structure"
-        description="Choose parts or select stable model identities."
-      >
-        {width < 1024 ? left : null}
-      </Dialog>
-      <Dialog
-        sheet
-        open={sheet === "right"}
-        onOpenChange={(open) => setSheet(open ? "right" : null)}
-        title="Project inspector"
-        description="Keyboard-accessible properties, diagnostics and inspection."
-      >
-        {width < 1280 ? right : null}
-      </Dialog>
       <Dialog
         open={resetOpen}
         onOpenChange={setResetOpen}
@@ -1203,6 +1344,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           model={model}
           policy={editPolicy}
           dirty={entry.session.past.length > 0 || project.hasContext}
+          onDownloadRequested={() => setDownloadedModel(model)}
           onLoad={(value) => opened({ model: value, variant: null, instructions: null }, "file")}
         />
         <div className="mt-6 border-t pt-4">

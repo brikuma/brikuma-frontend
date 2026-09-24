@@ -7,12 +7,17 @@ import {
   Vector2,
 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import type { PartDefinition } from "@/core/model/public";
+import {
+  getReceivingSlopeProfile,
+  NOMINAL_SIDE_CLEARANCE,
+  NOMINAL_VERTICAL_CLEARANCE,
+  type PartDefinition,
+} from "@/core/model/public";
 
 // Nominal stud pitch is one. Clearances and shell details are visual approximations.
 export const STUD_HEIGHT = 0.2;
-export const BODY_SIDE_CLEARANCE = 0.035;
-export const BODY_VERTICAL_CLEARANCE = 0.02;
+export const BODY_SIDE_CLEARANCE = NOMINAL_SIDE_CLEARANCE;
+export const BODY_VERTICAL_CLEARANCE = NOMINAL_VERTICAL_CLEARANCE;
 
 function clutchTube(bottom: number, ceiling: number, detailed: boolean) {
   return new LatheGeometry(
@@ -231,13 +236,10 @@ export function buildSlopedBrickShell(definition: PartDefinition, detailed: bool
   const height = definition.height - BODY_VERTICAL_CLEARANCE;
   const depth = definition.depth - BODY_SIDE_CLEARANCE;
   const bottom = -height / 2;
-  const receivesStuds = definition.id === "demo-slope-2x4" || definition.id === "demo-slope-1x2";
+  const receivingProfile = getReceivingSlopeProfile(definition);
   // Standard slopes retain the complete stud insertion envelope. The roof bed
   // includes its receiving base; the miniature decorative slope stays thin.
-  const toe = Math.min(
-    height,
-    definition.id === "demo-roof-bed" ? 0.46 : receivesStuds ? 0.36 : 0.06,
-  );
+  const toe = Math.min(height, receivingProfile?.toe ?? 0.06);
   const positions = geometry.getAttribute("position");
   for (let index = 0; index < positions.count; index++) {
     const fraction = Math.max(0, Math.min(1, (positions.getZ(index) + depth / 2) / depth));

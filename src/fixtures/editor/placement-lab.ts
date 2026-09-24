@@ -23,14 +23,14 @@ instances.push(
   part("lab-tile", "contacts", "demo-tile-2x2", "terracotta", 2, 3, -3),
   part("lab-obstacle", "obstacles", "demo-brick-2x2", "graphite", -2, 1, 1),
   part("lab-conflict", "obstacles", "demo-brick-2x2", "terracotta", -1, 1, 1),
-  part("lab-unsupported", "details", "demo-slope-2x4", "clay", 3, 1, 2),
+  part("lab-unsupported", "details", "demo-round-2x2", "clay", 3, 1, 2),
   part("lab-hole", "details", "demo-terracotta-pot", "terracotta", -6, 0.6, -3),
 );
 export const model: Model = {
   id: "placement-lab",
   title: "Placement lab",
-  baselineRevision: "placement-lab-r1",
-  revision: "placement-lab-r1",
+  baselineRevision: "placement-lab-r2",
+  revision: "placement-lab-r2",
   instances,
   groups: [
     { id: "base", name: "Studded base", protected: false },
