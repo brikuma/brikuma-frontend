@@ -251,6 +251,10 @@ function SceneContents(props: SceneProps) {
     const contextLost = () => cancel();
     const keydown = (event: KeyboardEvent) => {
       if (event.code === "Escape") {
+        if (dragSession.current) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
         cancel();
         return;
       }

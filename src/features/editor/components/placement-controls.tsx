@@ -234,6 +234,17 @@ export function PlacementControls({
                 step={axis === "y" ? 0.05 : 0.1}
                 value={position[axis]}
                 onChange={(e) => setPosition({ ...position, [axis]: e.target.value })}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setPosition({
+                      x: String(placement.transform.x),
+                      y: String(placement.transform.y),
+                      z: String(placement.transform.z),
+                    });
+                  }
+                }}
               />
             </label>
           ))}

@@ -18,6 +18,7 @@ export function SelectionTools({
   command,
   readOnly,
   onFocus,
+  onDuplicate,
   onHide,
   onClear,
 }: {
@@ -28,6 +29,7 @@ export function SelectionTools({
   command: (value: EditCommand) => boolean;
   readOnly: boolean;
   onFocus: () => void;
+  onDuplicate?: () => void;
   onHide: () => void;
   onClear: () => void;
 }) {
@@ -101,6 +103,11 @@ export function SelectionTools({
           Hide selection
         </Button>
       </div>
+      {ids.length > 1 && onDuplicate && (
+        <Button className="w-full text-xs" disabled={disabled} onClick={onDuplicate}>
+          Duplicate selection
+        </Button>
+      )}
       {ids.length > 0 && (
         <details open={ids.length > 1}>
           <summary className="min-h-10 py-2 text-sm">Rigid selection transform</summary>

@@ -21,6 +21,7 @@ export type SelectionCommand = Extract<
       | "rename-group"
       | "reparent-group"
       | "move-to-group"
+      | "duplicate-selection"
       | "replace-part";
   }
 >;
@@ -34,6 +35,7 @@ export function isSelectionCommand(command: EditCommand): command is SelectionCo
     "rename-group",
     "reparent-group",
     "move-to-group",
+    "duplicate-selection",
     "replace-part",
   ].includes(command.type);
 }
@@ -142,6 +144,28 @@ export function applySelectionCommand(
             }
           : item,
       );
+    } else if (command.type === "duplicate-selection") {
+      if (command.newIds.length !== ids.length || new Set(command.newIds).size !== ids.length)
+        return failure("duplicate-id", "Supply one unique new identity for each selected part.");
+      if (![command.delta.x, command.delta.y, command.delta.z].every(Number.isFinite))
+        return failure("invalid-transform", "Choose a finite translation for the duplicates.");
+      const sources = new Map(instances.map((part) => [part.id, part]));
+      instances = [
+        ...instances,
+        ...ids.map((id, index): PartInstance => {
+          const source = sources.get(id)!;
+          return {
+            ...source,
+            id: command.newIds[index],
+            transform: {
+              ...source.transform,
+              x: round(source.transform.x + command.delta.x),
+              y: round(source.transform.y + command.delta.y),
+              z: round(source.transform.z + command.delta.z),
+            },
+          };
+        }),
+      ];
     } else if (command.type === "remove-selection")
       instances = instances.filter((part) => !selected.has(part.id));
     else

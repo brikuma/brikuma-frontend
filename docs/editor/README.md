@@ -10,6 +10,20 @@ Owner: frontend. Baseline: specialist execution brief 1.0.0, 2026-09-24. This ex
 
 The canonical [architecture](../engineering/ARCHITECTURE.md), [quality gates](../engineering/QUALITY.md), [dependency register](../engineering/DEPENDENCIES.md), [tokens](../../src/styles/tokens.css), and [decisions](../DECISIONS.md) remain authoritative. This namespace does not introduce another governance or token system.
 
+## Discovery and selection follow-up
+
+The later master UX brief contributes these implemented editor behaviors; it is not a claim that its entire broader product scope is complete. Current executed results remain in [evidence](EVIDENCE.md).
+
+| Requirement coverage                                                         | Implementation                                                                                                                                | Regression                                                                      |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| EDR-002,016: original-ID search, favorites, committed recents, used filter   | [catalog](../../src/features/editor/components/part-catalog.tsx)                                                                              | [catalog component tests](../../tests/component/part-catalog.test.tsx), UX-004  |
+| EDR-005,007,012: aggregate inspector and atomic duplication of the selection | [commands](../../src/core/model/application/selection-commands.ts), [inspector](../../src/features/editor/components/selection-inspector.tsx) | [domain tests](../../tests/unit/duplicate-selection.test.ts), UX-002,005        |
+| EDR-006,016,017: scoped placement and viewport shortcuts                     | [viewport](../../src/features/editor/components/model-viewport.tsx), [workbench](../../src/features/editor/workbench.tsx)                     | [viewport tests](../../tests/component/model-viewport.test.tsx), UX-001         |
+| EDR-010,013: persistent revision-bound diagnostics with selection/focus      | [checks](../../src/features/editor/components/editor-checks.tsx)                                                                              | [integration tests](../../tests/component/editor-interactions.test.tsx), UX-003 |
+| EDR-017: short-window panel and canvas containment                           | [styles](../../src/styles/globals.css)                                                                                                        | UX-006                                                                          |
+
+UX-001–006 are defined in the [real-renderer browser suite](../../tests/e2e/editor-ux.spec.ts). They supplement the EDT acceptance coverage below.
+
 ## Requirement register
 
 “Implemented” describes shipped code, not all-device certification. “Tested” references only the executed checks in EVIDENCE; automated tasks are not participant research. Source is the specialist brief unless a source ID in [research](RESEARCH.md) is identified. P0/P1 capability limits remain explicit below and in the detailed contracts.

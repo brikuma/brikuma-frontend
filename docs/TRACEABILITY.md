@@ -52,3 +52,9 @@ Relevant evidence includes [connections](../tests/unit/connections.test.ts), [ge
 ## Specialist editor continuation
 
 The EDR-001–036 register, source/hypothesis links, owning files, EDT acceptance IDs and actual status are maintained in the [editor requirement register](editor/README.md). [Editor evidence](editor/EVIDENCE.md) separates current executed checks from the historical frontend baseline above.
+
+## Editor discovery and selection follow-up
+
+The later user-supplied master UX brief is applied to the existing editor in this slice. FE-007 / EDR-002 gain normalized catalog search, visible original IDs, favorites, committed recents and a used-parts filter. FE-004–006 / EDR-005,007,012 gain aggregate selection properties and atomic multi-part duplication. FE-010 / EDR-010,013 gain persistent revision-bound checks and direct selection/focus of affected IDs. FE-019 / EDR-016,017 gain scoped placement/viewport shortcuts and bounded short-window panels.
+
+Contracts are in [experience](editor/EXPERIENCE.md) and [modeling](editor/MODELING.md). Pure rejection/history coverage is in [duplicate-selection tests](../tests/unit/duplicate-selection.test.ts); HTML integration in [editor interaction tests](../tests/component/editor-interactions.test.tsx); actual canvas, keyboard, responsive and visibility regressions in [UX browser tests](../tests/e2e/editor-ux.spec.ts). Their executed results and limits belong to [editor evidence](editor/EVIDENCE.md). The broader master brief, human usability results and unimplemented clipboard/marquee/measurement workflows are not claimed complete.

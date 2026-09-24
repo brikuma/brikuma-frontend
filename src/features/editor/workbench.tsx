@@ -22,7 +22,8 @@ import {
   Keyboard,
 } from "lucide-react";
 import { useProject } from "./state/session";
-import { PartCatalog } from "./components/part-catalog";
+import { PartCatalog, type PartCatalogPreferences } from "./components/part-catalog";
+import { EditorChecks, type ModelChecks } from "./components/editor-checks";
 import { Structure } from "./components/structure";
 import { SelectionInspector } from "./components/selection-inspector";
 import { SelectionTools } from "./components/selection-tools";
@@ -41,7 +42,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { partDefinitions, editPolicy } from "@/fixtures/catalog";
 import {
-  diagnoseModel,
+  getSelectionBounds,
   snapGridTransform,
   getGroupInstanceIds,
   isGroupProtected,
@@ -50,7 +51,7 @@ import {
   type Model,
   type QuarterTurn,
 } from "@/core/model/public";
-import type { PlacementPreview } from "./viewport-types";
+import type { PlacementPreview, ViewportTool } from "./viewport-types";
 import { snapPlacementCenter } from "./placement-grid";
 import type { SceneFixture } from "@/fixtures/scene-types";
 import type { EditorFixtureId } from "@/fixtures/editor";
@@ -63,57 +64,6 @@ const readWidth = () => window.innerWidth;
 const serverWidth = () => 0;
 
 type TaskMode = "build" | "inspect" | "present";
-
-function Checks({ model, onFocus }: { model: Model; onFocus: (ids: readonly string[]) => void }) {
-  const [result, setResult] = useState<ReturnType<typeof diagnoseModel> | null>(null);
-  return (
-    <section className="space-y-3" aria-label="Geometric diagnostics">
-      <h2 className="text-base">Geometric diagnostics</h2>
-      <p className="text-xs text-muted-foreground">
-        Hidden pieces participate. Rendering quality never changes these checks.
-      </p>
-      <Button onClick={() => setResult(diagnoseModel(model, partDefinitions))}>
-        {result ? "Recalculate checks" : "Run supported checks"}
-      </Button>
-      {result && (
-        <>
-          <p className="text-xs">
-            {result.modelRevision === model.revision ? "Current" : "Stale: model revision changed"}{" "}
-            · {result.modelRevision}
-          </p>
-          <p className="text-sm">{result.conflicts.length} supported occupied-volume conflicts</p>
-          <p className="text-xs">
-            {result.checkedInstanceCount} supported pieces · {result.uncheckedIds.length} not
-            checked
-          </p>
-          <p className="text-xs text-muted-foreground">Rule {result.rule}</p>
-          <ul className="space-y-2">
-            {result.conflicts.slice(0, 30).map((conflict, index) => (
-              <li key={index}>
-                <button
-                  className="button w-full break-all text-left text-xs"
-                  onClick={() => onFocus(conflict.ids)}
-                >
-                  Reveal {conflict.ids.join(" / ")}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {result.conflicts.length > 30 && <p className="text-xs">First 30 conflicts shown.</p>}
-        </>
-      )}
-      <div className="border-t pt-3 text-xs text-muted-foreground">
-        <p>
-          Coverage: bounded basic rectangular brick/plate occupied volumes and known stud mating.
-          Custom shapes and arbitrary cavity relationships are not fully checked.
-        </p>
-        <p className="mt-2">
-          Physical stability, clutch force, load and build order: not evaluated.
-        </p>
-      </div>
-    </section>
-  );
-}
 
 export function Workbench() {
   const project = useProject();
@@ -156,6 +106,20 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   const [pending, setPending] = useState<PlacementPreview | null>(null);
   const [repeat, setRepeat] = useState(false);
   const [catalogColor, setCatalogColor] = useState("limestone");
+  const [catalogPreferences, setCatalogPreferences] = useState<PartCatalogPreferences>({
+    search: "",
+    category: "all",
+    collection: "all",
+    usedOnly: false,
+  });
+  const [favoritePartIds, setFavoritePartIds] = useState<readonly string[]>([]);
+  const [recentPartIds, setRecentPartIds] = useState<readonly string[]>([]);
+  const [checkResult, setCheckResult] = useState<ModelChecks | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [toolRequest, setToolRequest] = useState<{ serial: number; tool: ViewportTool }>({
+    serial: 0,
+    tool: "select",
+  });
   const [notice, setNotice] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
   const [fileOpen, setFileOpen] = useState(false);
@@ -256,7 +220,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   }
   function cancelPlacement() {
     setPending(null);
-    setNotice("Placement cancelled; model unchanged.");
+    if (pending) setNotice("Placement cancelled; model unchanged.");
   }
   function changePlacement(transform: GridTransform) {
     setPending((current) => (current ? { ...current, transform } : null));
@@ -321,11 +285,14 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       baseRevision: model.revision,
     });
     if (ok) {
-      setHidden((current) => current.filter((value) => value !== group.id));
+      setHidden(hiddenIds);
       setSelected([instanceId]);
       setSelectedGroup(null);
       setInspector("Selection");
       setNotice("Part placed. Undo restores the previous model.");
+      setRecentPartIds((current) =>
+        [pending.partId, ...current.filter((id) => id !== pending.partId)].slice(0, 24),
+      );
       if (!repeat) {
         setPending(null);
         setSheet(null);
@@ -333,23 +300,40 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     }
     return ok;
   }
-  function duplicate(partId: string) {
-    const part = model.instances.find((item) => item.id === partId);
-    if (!part) return;
-    const definition = partDefinitions.find((item) => item.id === part.partId)!;
-    const newId = allocateId();
-    const offset = part.transform.rotation % 180 === 0 ? definition.width : definition.depth;
+  function duplicate(ids: readonly string[]) {
+    const bounds = getSelectionBounds(model, partDefinitions, ids);
+    if (!bounds || !ids.length || pending) return;
+    const used = new Set(model.instances.map((part) => part.id));
+    const newIds: string[] = [];
+    let next = entry.session.nextRevision;
+    while (newIds.length < ids.length) {
+      if (!Number.isSafeInteger(next)) {
+        setNotice("The local identity counter is exhausted.");
+        return;
+      }
+      const id = `added-${next++}`;
+      if (!used.has(id)) {
+        newIds.push(id);
+        used.add(id);
+      }
+    }
     if (
       command({
-        type: "duplicate",
-        id: partId,
-        newId,
-        transform: { ...part.transform, x: part.transform.x + Math.ceil(offset * 2) / 2 },
+        type: "duplicate-selection",
+        ids,
+        newIds,
+        delta: { x: Math.ceil(bounds.width * 2) / 2, y: 0, z: 0 },
       })
     ) {
-      setSelected([newId]);
+      setSelected(newIds);
       setSelectedGroup(null);
-      setHidden((current) => current.filter((value) => value !== part.groupId));
+      setInspector("Selection");
+      // Keep previously hidden physical members hidden while revealing only the new copies.
+      setHidden(hiddenIds);
+      setToolRequest((current) => ({ serial: current.serial + 1, tool: "move" }));
+      setNotice(
+        `${ids.length} ${ids.length === 1 ? "part" : "parts"} duplicated as a draft. Move is active; Undo removes this copy in one step.`,
+      );
     }
   }
   function clearPresentation() {
@@ -373,12 +357,22 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     if (value === "build") clearPresentation();
   }
   function focus(parts: readonly string[]) {
-    setFocusIds(parts);
+    const existing = parts.filter((id) => model.instances.some((part) => part.id === id));
+    if (!existing.length) return;
+    clearPresentation();
+    setAssembledResetRequest((current) => current + 1);
+    if (validScope && existing.some((id) => !getGroupInstanceIds(model, validScope).includes(id)))
+      setScope(null);
+    setSelected(existing);
+    setSelectedGroup(null);
+    setFocusRequest((current) => current + 1);
+    setFocusIds(existing);
     setMode("inspect");
     setPending(null);
   }
   function opened(fixture: SceneFixture) {
     project.replaceFixture(fixture);
+    setCheckResult(null);
     setSelected([]);
     setHidden(fixture.initiallyHiddenIds ?? []);
     setScope(null);
@@ -393,16 +387,16 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       (event.target instanceof HTMLElement && event.target.closest('[role="dialog"]'))
     )
       return;
-    if (event.key === "Escape" && pending) {
-      event.preventDefault();
-      cancelPlacement();
-      return;
-    }
     if (
       event.target instanceof HTMLElement &&
       event.target.closest("input,textarea,select,[contenteditable]")
     )
       return;
+    if (event.key === "Escape" && pending) {
+      event.preventDefault();
+      cancelPlacement();
+      return;
+    }
     const key = event.key.toLowerCase();
     if ((event.metaKey || event.ctrlKey) && key === "z") {
       event.preventDefault();
@@ -410,11 +404,60 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       return;
     }
     if (event.key === "Escape" && focusIds) {
+      event.preventDefault();
       clearPresentation();
       setNotice("Previous visibility restored.");
       return;
     }
-    if (event.metaKey || event.ctrlKey || event.altKey || readOnly) return;
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && !pending) {
+      if (key === "a") {
+        event.preventDefault();
+        if (viewLocked || section || proposal) {
+          setNotice("Return to the assembled model before selecting all visible parts.");
+          return;
+        }
+        const eligible = validScope ? new Set(getGroupInstanceIds(model, validScope)) : null;
+        setSelected(
+          model.instances
+            .filter(
+              (part) =>
+                (!focusIds?.length || focusIds.includes(part.id)) &&
+                (focusIds?.includes(part.id) || !hiddenIds.includes(part.id)) &&
+                (!steps || steps.visibleIds.includes(part.id)) &&
+                (!eligible || eligible.has(part.id)),
+            )
+            .map((part) => part.id),
+        );
+        setSelectedGroup(null);
+        setInspector("Selection");
+        return;
+      }
+      if (key === "d" && selectionIds.length) {
+        event.preventDefault();
+        duplicate(selectionIds);
+        return;
+      }
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    if (key === "h" && !pending) {
+      event.preventDefault();
+      if (event.shiftKey) {
+        setHidden([]);
+        setNotice("Hidden parts shown; the model is unchanged.");
+      } else if (selectionIds.length) {
+        setHidden((current) => [...new Set([...current, ...selectionIds])]);
+        setNotice("Selection hidden; physical parts and counts are unchanged.");
+      }
+      return;
+    }
+    if (readOnly) return;
+    if (key === "p") {
+      event.preventDefault();
+      setTab("Parts");
+      setLeftCollapsed(false);
+      if (width < 1024) setSheet("left");
+      return;
+    }
     if (key === "r" && pending) {
       event.preventDefault();
       changePlacement({
@@ -426,7 +469,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     if (!selection || pending) return;
     if (key === "d" && event.shiftKey) {
       event.preventDefault();
-      duplicate(selection);
+      duplicate(selectionIds);
       return;
     }
     if (key === "delete" || key === "backspace") {
@@ -511,6 +554,12 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               colorId={catalogColor}
               onColorChange={setCatalogColor}
               selectedPartId={pending?.partId}
+              preferences={catalogPreferences}
+              onPreferencesChange={setCatalogPreferences}
+              favoritePartIds={favoritePartIds}
+              onFavoriteChange={setFavoritePartIds}
+              recentPartIds={recentPartIds}
+              usedPartIds={[...new Set(model.instances.map((part) => part.partId))]}
             />
           </>
         ) : tab === "Structure" ? (
@@ -583,7 +632,12 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       </div>
       <div className="space-y-4 p-4">
         {inspector === "Checks" ? (
-          <Checks model={model} onFocus={focus} />
+          <EditorChecks
+            model={model}
+            result={checkResult}
+            onResult={setCheckResult}
+            onFocus={focus}
+          />
         ) : inspector === "Activity" ? (
           <section>
             <h2 className="text-base">Local edit history</h2>
@@ -603,6 +657,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               command={command}
               readOnly={readOnly}
               onFocus={() => focus(selectionIds)}
+              onDuplicate={() => duplicate(selectionIds)}
               onHide={() => {
                 setHidden((current) => [...new Set([...current, ...selectionIds])]);
                 setNotice("Selection hidden; physical parts and counts are unchanged.");
@@ -615,9 +670,11 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             <SelectionInspector
               model={model}
               selected={selectionIds.length === 1 ? selection : null}
+              selectedIds={selectionIds}
+              groupId={validSelectedGroup}
               onSelect={select}
               command={command}
-              onDuplicate={duplicate}
+              onDuplicate={(id) => duplicate([id])}
               readOnly={readOnly}
               onOpenCatalog={() => {
                 setTab("Parts");
@@ -755,7 +812,8 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         <div className="min-w-0">
           <h1 className="truncate text-sm">{model.title}</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {model.instances.length.toLocaleString("en")} parts ·{" "}
+            {model.instances.length.toLocaleString("en")}{" "}
+            {model.instances.length === 1 ? "part" : "parts"} ·{" "}
             <span className="font-mono">{model.revision}</span>
           </p>
         </div>
@@ -899,7 +957,10 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               <li>Shift + click: toggle selection</li>
               <li>Arrow keys: move selection 0.5 stud; Shift: 1 stud</li>
               <li>Page Up / Down: move vertically 0.4 stud</li>
-              <li>Shift D: duplicate active part</li>
+              <li>⌘/Ctrl D (or Shift D): duplicate selection and enter Move</li>
+              <li>⌘/Ctrl A: select visible pieces in the current group scope</li>
+              <li>P: open parts · H: hide selection · Shift H: show hidden parts</li>
+              <li>0 / 1 / 2 / 3: Isometric / Front / Right / Top (viewport)</li>
               <li>Escape: cancel preview or restore focus view</li>
               <li>⌘/Ctrl Z: undo; Shift: redo</li>
               <li>Secondary drag: orbit; middle or Space + primary: pan</li>
@@ -911,7 +972,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-primary-muted px-3 py-1 text-xs">
           <p>
             {focusIds
-              ? `Focus lens · ${focusIds.length} pieces`
+              ? `Focus lens · ${focusIds.length} ${focusIds.length === 1 ? "piece" : "pieces"}`
               : section
                 ? "Visual section"
                 : "Curated step preview"}{" "}
@@ -949,6 +1010,8 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         >
           <ModelViewport
             compactControls={width < 640}
+            toolRequest={toolRequest}
+            focusRequest={focusRequest}
             model={proposal ?? model}
             assemblyView={entry.fixture.assemblyView}
             selected={selection}
@@ -1068,6 +1131,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           variant="primary"
           onClick={() => {
             reset();
+            setCheckResult(null);
             setSelected([]);
             setSelectedGroup(null);
             setScope(null);

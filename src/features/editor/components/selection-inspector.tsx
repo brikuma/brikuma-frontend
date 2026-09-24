@@ -5,6 +5,7 @@ import {
   getPartConnections,
   isGroupProtected,
   findStudContacts,
+  getSelectionBounds,
   type Model,
   type EditCommand,
   type PartInstance,
@@ -84,6 +85,8 @@ function PositionFields({
 export function SelectionInspector({
   model,
   selected,
+  selectedIds = selected ? [selected] : [],
+  groupId = null,
   onSelect,
   command,
   onDuplicate,
@@ -92,6 +95,8 @@ export function SelectionInspector({
 }: {
   model: Model;
   selected: string | null;
+  selectedIds?: readonly string[];
+  groupId?: string | null;
   onSelect: (id: string) => void;
   command: (command: EditCommand) => boolean;
   onDuplicate?: (id: string) => void;
@@ -99,6 +104,14 @@ export function SelectionInspector({
   readOnly?: boolean;
 }) {
   const part = model.instances.find((part) => part.id === selected);
+  const selectedParts = model.instances.filter((item) => selectedIds.includes(item.id));
+  const typeCount = new Set(selectedParts.map((item) => item.partId)).size;
+  const colorCount = new Set(selectedParts.map((item) => item.colorId)).size;
+  const selectedGroup = model.groups.find((item) => item.id === groupId);
+  const aggregateSelection = selectedParts.length > 1 || Boolean(selectedGroup);
+  const selectedBounds = aggregateSelection
+    ? getSelectionBounds(model, partDefinitions, selectedIds)
+    : null;
   const definition = partDefinitions.find((p) => p.id === part?.partId);
   const group = model.groups.find((g) => g.id === part?.groupId);
   const color = colors.find((item) => item.id === part?.colorId) ?? colors[0];
@@ -118,7 +131,11 @@ export function SelectionInspector({
             value={part?.id ?? ""}
             onChange={(e) => onSelect(e.target.value)}
           >
-            <option value="">Select a brick in the model…</option>
+            <option value="">
+              {aggregateSelection
+                ? `${selectedParts.length} pieces selected`
+                : "Select a brick in the model…"}
+            </option>
             {model.instances.map((item) => (
               <option value={item.id} key={item.id}>
                 {item.id} · {item.colorId}
@@ -126,7 +143,51 @@ export function SelectionInspector({
             ))}
           </select>
         </label>
-        {part && definition ? (
+        {aggregateSelection ? (
+          <section aria-label="Selection summary" className="space-y-3">
+            <h2 className="text-base">
+              {selectedGroup ? "Assembly properties" : "Selection properties"}
+            </h2>
+            <p className="text-sm">
+              {selectedParts.length} pieces · {typeCount} part {typeCount === 1 ? "type" : "types"}{" "}
+              · {colorCount} {colorCount === 1 ? "color" : "colors"}
+            </p>
+            {selectedGroup && (
+              <p className="break-all text-xs">
+                {selectedGroup.name} · {selectedGroup.id}
+              </p>
+            )}
+            {selectedBounds && (
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Nominal body bounds · W × D × H · studs
+                </p>
+                <p className="mt-1 text-sm tabular-nums">
+                  {selectedBounds.width} × {selectedBounds.depth} × {selectedBounds.height}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Studs and presentation offsets excluded.
+                </p>
+              </div>
+            )}
+            <ul className="space-y-2" aria-label="Selection colors">
+              {colors
+                .filter((item) => selectedParts.some((part) => part.colorId === item.id))
+                .map((item) => (
+                  <li key={item.id} className="flex items-center gap-2 text-xs">
+                    <span
+                      className="size-3.5 rounded-full border border-foreground/15"
+                      style={{ backgroundColor: item.hex }}
+                    />
+                    <span>{item.name}</span>
+                    <span className="ml-auto tabular-nums">
+                      {selectedParts.filter((part) => part.colorId === item.id).length}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          </section>
+        ) : part && definition ? (
           <>
             <div className="mb-4 flex items-center gap-3">
               <div className="h-16 w-20 shrink-0 rounded-md bg-background">
@@ -136,6 +197,9 @@ export function SelectionInspector({
                 <h2 className="text-base">{definition.name}</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {group?.name} · {color.name}
+                </p>
+                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                  {part.id} · {definition.id}
                 </p>
               </div>
             </div>
@@ -260,7 +324,7 @@ export function SelectionInspector({
             </div>
             <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
               <span>Rotation {part.transform.rotation}°</span>
-              <span>R · Shift D</span>
+              <span>R · Mod D</span>
             </div>
             <Button
               className="mt-4 w-full text-danger"
@@ -325,8 +389,8 @@ export function SelectionInspector({
           </div>
         </dl>
         <p className="mt-3 text-xs text-muted-foreground">
-          Stud alignment is shown for supported parts. Strength and full model collisions are not
-          checked.
+          Stud alignment is shown for supported parts. Run Checks for bounded occupied-volume
+          diagnostics. Physical stability is not evaluated.
         </p>
       </section>
     </div>

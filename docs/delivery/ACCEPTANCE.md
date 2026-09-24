@@ -1,5 +1,9 @@
 # Acceptance and evidence
 
+## Editor discovery and selection follow-up — 2026-09-24
+
+The follow-up to `7fb1b97` implements the bounded editor behaviors in the [requirement register](../editor/README.md#discovery-and-selection-follow-up). The latest [editor evidence](../editor/EVIDENCE.md#discovery-and-selection-follow-up) owns exact build identity, actual browser/check results, new regression IDs and limits. It distinguishes this slice from the specialist measurements below and does not claim completion of the entire later master product brief.
+
 ## Editor specialist checkpoint — 2026-09-24
 
 The focused editor pass extends frontend baseline `8f8e919`; its current executed results and remaining limits are recorded in [editor evidence](../editor/EVIDENCE.md), with [requirement coverage](../editor/README.md). That ledger supersedes historical editor counts, contracts and measurements below for this candidate. Other product routes remain preserved and regression-tested. The versioned local project download, actual PNG output and deterministic basic placement kernel are authorized by the specialist brief; they do not imply a backend, cloud save, physical certification or general CAD pipeline.

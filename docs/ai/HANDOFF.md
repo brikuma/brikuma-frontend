@@ -1,8 +1,8 @@
 # Frontend handoff
 
-ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, editor specialist brief 1.0.0.
+ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, editor discovery and selection follow-up.
 
-The current editor extends baseline `8f8e919` with a browser-local modeling kernel and workbench. Other product routes are preserved. The frontend remains an independent Git repository; no approved child remotes or root gitlinks exist. No push, remote creation, deployment, backend or infrastructure implementation is included.
+The specialist editor was committed as `335a332`, followed by tracked pattern skills in `7fb1b97`. This follow-up extends that baseline with catalog search/favorites/committed recents, selection summaries, atomic multi-part duplication, persistent diagnostic drill-in and scoped shortcuts. A real short-window catalog/canvas stretching defect found during screenshot review was corrected with contained panel scrolling. Other product routes are preserved. The frontend remains an independent Git repository; no approved child remotes or root gitlinks exist. No push, remote creation, deployment, backend or infrastructure implementation is included.
 
 ## Current behavior
 
@@ -17,13 +17,15 @@ The [requirement register](../editor/README.md) maps EDR-001–036 to implementa
 
 ## Verification and review
 
-Use the pinned existing Node 22.23.2 / npm 10.9.8 toolchain. No runtime dependencies changed. Production and complete npm advisory audits reported zero known vulnerabilities on this pass; the existing time-limited ESLint 9 maintenance exception remains in the [dependency register](../engineering/DEPENDENCIES.md). Existing architecture, hook and CI gates remain enabled.
+Use the pinned existing Node 22.23.2 / npm 10.9.8 toolchain. No dependency or lockfile changed. Production and complete npm advisory audits reported zero known vulnerabilities in the specialist baseline; they were not repeated for this follow-up. The existing time-limited ESLint 9 maintenance exception remains in the [dependency register](../engineering/DEPENDENCIES.md). Existing architecture, hook and CI gates remain enabled.
 
-Generated verification/review records in `artifacts/quality/` bind checks to the exact staged tree and lockfile. Source/build identities and command logs are listed in the evidence ledger. A separate reviewer found and verified fixes for gesture focus, assembled reset, revision exhaustion, export continuity and invisible selection outlines; real browser tests additionally caught background-click clearing and WebKit sheet focus.
+Generated verification/review records in `artifacts/quality/` bind checks to the exact staged tree and lockfile. Source/build identities, command results and visual artifacts are in the evidence ledger; current raw files live under `artifacts/editor-ux/`. Independent review covers core boundaries, full-selection atomicity, hidden-member preservation, diagnostic focus, input ownership and code conventions. The exact commit/file inventory is generated after the child commit in `artifacts/editor-ux/delivery-manifest.json`.
 
 ## Remaining boundaries
 
 EDR-029 is blocked by absent verified hinge geometry/pivot/axis/range metadata. No simulated mechanical validity is claimed. P2 remains deferred. Human participant count is zero; field performance, real iPad/touch/trackpad hardware and screen-reader behavior are not measured. Automated narrow layouts and WebKit are not device certification. Firefox launch availability and performance targets retain the actual statuses in evidence.
+
+The later broad master prompt is only partially applied through this editor slice. Clipboard copy/paste, marquee selection, additional measurement workflows and product-page expansion have not been implemented here. Catalog preferences remain in memory; there is no added autosave, AI service or cloud persistence.
 
 The next smallest unresolved editor risk is real-device touch/trackpad gesture arbitration. Dense connector/diagnostic query costs need separate workloads beyond the measured rendering and selection baseline. General magnetic screen-space snapping, free-angle gizmos, adaptive quality and arbitrary CAD support remain outside the declared bounded contracts.
 

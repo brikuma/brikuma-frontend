@@ -132,6 +132,12 @@ export type EditCommand =
   | { readonly type: "reparent-group"; readonly groupId: string; readonly parentId?: string }
   | { readonly type: "move-to-group"; readonly ids: readonly string[]; readonly groupId: string }
   | { readonly type: "replace-part"; readonly id: string; readonly partId: string }
+  | {
+      readonly type: "duplicate-selection";
+      readonly ids: readonly string[];
+      readonly newIds: readonly string[];
+      readonly delta: Readonly<{ x: number; y: number; z: number }>;
+    }
   | { readonly type: "add"; readonly instance: PartInstance }
   | { readonly type: "remove"; readonly id: string }
   | { readonly type: "recolor"; readonly id: string; readonly colorId: string }

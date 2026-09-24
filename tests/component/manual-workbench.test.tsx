@@ -209,7 +209,7 @@ describe("Manual building through accessible controls", () => {
     expect(within(selected).getByText("Width").nextElementSibling).toHaveTextContent("2");
   });
 
-  it("reveals the destination assembly when adding or duplicating into a hidden group", async () => {
+  it("reveals added copies while preserving previously hidden physical members", async () => {
     const user = userEvent.setup();
     render(
       <SessionProvider>
@@ -225,8 +225,16 @@ describe("Manual building through accessible controls", () => {
     expect(screen.getByTestId("hidden-model-groups")).toHaveTextContent("No hidden groups");
     await user.click(screen.getByRole("button", { name: "Structure" }));
     await user.click(screen.getByRole("button", { name: "Hide Free-form workspace" }));
+    const originalId = (
+      screen.getByRole("combobox", {
+        name: "Choose a logical part",
+      }) as HTMLSelectElement
+    ).value;
     await user.click(screen.getByRole("button", { name: "Duplicate" }));
-    expect(screen.getByTestId("hidden-model-groups")).toHaveTextContent("No hidden groups");
+    expect(screen.getByTestId("hidden-model-groups").textContent).toBe(originalId);
+    expect(screen.getByRole("combobox", { name: "Choose a logical part" })).not.toHaveValue(
+      originalId,
+    );
     expect(screen.getByTestId("piece-count")).toHaveTextContent("2");
   });
 

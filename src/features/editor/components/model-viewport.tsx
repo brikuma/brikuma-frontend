@@ -140,6 +140,13 @@ export function ModelViewport(props: ModelViewportProps) {
   const [view, setView] = useState<CameraView>("iso");
   const [fitRequest, setFitRequest] = useState(0);
   const [handledViewRequest, setHandledViewRequest] = useState(-1);
+  const [handledFocusRequest, setHandledFocusRequest] = useState(0);
+  if (props.focusRequest && props.focusRequest > 0 && props.focusRequest !== handledFocusRequest) {
+    setHandledFocusRequest(props.focusRequest);
+    setFitSelection(Boolean(selected || props.selectedIds?.length));
+    setFitRequest((value) => value + 1);
+    setZoom(1);
+  }
   if (props.viewRequest && props.viewRequest.serial !== handledViewRequest) {
     setHandledViewRequest(props.viewRequest.serial);
     setView(props.viewRequest.view);
@@ -150,6 +157,7 @@ export function ModelViewport(props: ModelViewportProps) {
   const [showGrid, setShowGrid] = useState(true);
   const [showDimensions, setShowDimensions] = useState(false);
   const [tool, setTool] = useState<ViewportTool>("select");
+  const [handledToolRequest, setHandledToolRequest] = useState(0);
   const [rotationPreview, setRotationPreview] = useState<90 | -90 | null>(null);
   const [rotationBase, setRotationBase] = useState("");
   const rotationKey = `${model.revision}:${selected}:${props.selectedIds?.join(",") ?? selected}`;
@@ -197,6 +205,22 @@ export function ModelViewport(props: ModelViewportProps) {
   const placementColor = colors.find((color) => color.id === placement?.colorId);
   const feedback = placement ? placementFeedback(model, partDefinitions, placement) : null;
   const editingLocked = Boolean(inspection || exploded || props.section || exportRequest);
+  const readOnlyMode = props.mode !== undefined && props.mode !== "build";
+  if (readOnlyMode && tool !== "select") {
+    setTool("select");
+    setRotationPreview(null);
+  }
+  if (
+    props.toolRequest &&
+    props.toolRequest.serial > 0 &&
+    props.toolRequest.serial !== handledToolRequest
+  ) {
+    setHandledToolRequest(props.toolRequest.serial);
+    if (props.toolRequest.tool === "select" || (!readOnlyMode && !editingLocked && !placement)) {
+      setTool(props.toolRequest.tool);
+      setRotationPreview(null);
+    }
+  }
   useEffect(() => {
     onEditingLockChange?.(editingLocked);
   }, [editingLocked, onEditingLockChange]);
@@ -205,15 +229,10 @@ export function ModelViewport(props: ModelViewportProps) {
     const visibility = () => {
       if (document.hidden) cancel();
     };
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cancel();
-    };
     window.addEventListener("blur", cancel);
-    window.addEventListener("keydown", keydown);
     document.addEventListener("visibilitychange", visibility);
     return () => {
       window.removeEventListener("blur", cancel);
-      window.removeEventListener("keydown", keydown);
       document.removeEventListener("visibilitychange", visibility);
     };
   }, []);
@@ -281,41 +300,77 @@ export function ModelViewport(props: ModelViewportProps) {
       onKeyDown={(event) => {
         const target = event.target;
         if (
-          target instanceof HTMLElement &&
-          (target.matches("input, textarea, select") || target.isContentEditable)
+          event.defaultPrevented ||
+          (target instanceof HTMLElement &&
+            (target.closest(
+              'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="dialog"], [role="alertdialog"]',
+            ) ||
+              target.isContentEditable))
         )
           return;
         if (event.key === "Escape") {
-          setRotationPreview(null);
-          onCancelPlacement?.();
-          setPickCandidates([]);
-          setSelectThrough(false);
-          setExportRequest(null);
-          setContextCommands(false);
+          if (rotationPreview !== null) setRotationPreview(null);
+          else if (placement) onCancelPlacement?.();
+          else if (exportRequest) {
+            setExportRequest(null);
+            setExportMessage("Image export cancelled. The model is unchanged.");
+          } else if (selectThrough) {
+            setPickCandidates([]);
+            setSelectThrough(false);
+          } else if (contextCommands) setContextCommands(false);
+          else return;
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
         if (event.ctrlKey || event.metaKey || event.altKey) return;
-        if (event.key.toLowerCase() === "f") {
+        const key = event.key.toLowerCase();
+        // The workbench owns rotation of an uncommitted catalog placement.
+        if (key === "r" && placement) return;
+        const namedView = ({ "0": "iso", "1": "front", "2": "right", "3": "top" } as const)[
+          key as "0" | "1" | "2" | "3"
+        ];
+        if (namedView) {
+          if (editing && grazingView(namedView)) return;
           event.preventDefault();
-          setFitSelection(Boolean(selected));
+          event.stopPropagation();
+          setView(namedView);
+          setFitSelection(false);
+          setFitRequest((value) => value + 1);
+          setZoom(1);
+          return;
+        }
+        if (key === "f") {
+          event.preventDefault();
+          event.stopPropagation();
+          setFitSelection(Boolean(selected || props.selectedIds?.length));
           setFitRequest((n) => n + 1);
           setZoom(1);
+          return;
         }
-        if (event.key.toLowerCase() === "v") {
+        if (key === "v") {
+          event.preventDefault();
+          event.stopPropagation();
           setRotationPreview(null);
-          onCancelPlacement?.();
+          if (placement) onCancelPlacement?.();
+          exitInspection();
           setTool("select");
+          return;
         }
-        if (event.key.toLowerCase() === "g" && (!props.mode || props.mode === "build")) {
-          onCancelPlacement?.();
+        if (readOnlyMode || exploded || props.section || exportRequest) return;
+        if (key === "g" && onMove) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (placement) onCancelPlacement?.();
+          setRotationPreview(null);
+          exitInspection();
           setTool("move");
+          return;
         }
-        if (
-          event.key.toLowerCase() === "r" &&
-          (!props.mode || props.mode === "build") &&
-          props.onRotate
-        ) {
-          onCancelPlacement?.();
+        if (key === "r" && props.onRotate) {
+          event.preventDefault();
+          event.stopPropagation();
+          exitInspection();
           setTool("rotate");
         }
       }}
@@ -554,7 +609,9 @@ export function ModelViewport(props: ModelViewportProps) {
               </div>
               <p className="mt-2 leading-5">
                 Right drag: orbit. Middle drag or Space + primary drag: pan. F: fit selection. V:
-                select. G: move. Escape: cancel. Shortcuts apply inside the viewport.
+                select. G: move. R: rotate the placement or select Rotate. 0/1/2/3:
+                isometric/front/right/top views. Escape: cancel the current action. Shortcuts apply
+                inside the viewport.
               </p>
             </div>
           </details>
@@ -792,6 +849,7 @@ export function ModelViewport(props: ModelViewportProps) {
           <SceneBoundary key={reset} fallback={fallback} onFailure={fail}>
             <Scene
               {...props}
+              placement={readOnlyMode ? null : placement}
               exploded={exploded}
               assemblyMode={assemblyMode}
               assemblyAmount={assemblyAmount}
@@ -905,7 +963,8 @@ export function ModelViewport(props: ModelViewportProps) {
         </Dialog>
         <div className="pointer-events-none absolute left-5 top-5 text-xs text-muted-foreground">
           <span className="font-medium text-foreground">
-            {model.instances.length.toLocaleString("en")} pieces
+            {model.instances.length.toLocaleString("en")}{" "}
+            {model.instances.length === 1 ? "piece" : "pieces"}
           </span>
           <span className="ml-2 opacity-70">
             {inspection
@@ -945,13 +1004,14 @@ export function ModelViewport(props: ModelViewportProps) {
               <p className="mt-1 text-xs text-muted-foreground">
                 {placementColor?.name} ·{" "}
                 {placement.target === "ground"
-                  ? "Ground plane"
+                  ? "Grid"
                   : placement.target === "free"
-                    ? "Free placement"
-                    : "Snap to studs"}
+                    ? "Free position"
+                    : "Connect"}
               </p>
               <p
-                className={`mt-1 text-xs font-medium ${feedback?.allowed ? "text-success" : "text-danger"}`}
+                className={`mt-1 text-xs font-medium ${feedback?.kind === "blocked" ? "text-danger" : feedback?.kind === "free" ? "text-warning" : "text-muted-foreground"}`}
+                aria-label="Placement feedback"
                 aria-live="polite"
               >
                 {feedback?.message}

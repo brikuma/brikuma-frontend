@@ -6,7 +6,12 @@ export {
   rotateVector,
   fromLDrawPoint,
 } from "./domain/model";
-export { deriveBom, isInstructionCompatible, missingQuantity } from "./domain/queries";
+export {
+  deriveBom,
+  getSelectionBounds,
+  isInstructionCompatible,
+  missingQuantity,
+} from "./domain/queries";
 export {
   getPartConnections,
   worldStudSites,

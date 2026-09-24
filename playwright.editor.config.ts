@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 import base from "./playwright.config";
 export default defineConfig({
   ...base,
-  testMatch: "editor-specialist.spec.ts",
+  testMatch: ["editor-specialist.spec.ts", "editor-ux.spec.ts"],
   projects: [
     {
       name: "chromium",

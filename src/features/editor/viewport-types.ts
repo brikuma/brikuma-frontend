@@ -61,4 +61,6 @@ export interface ModelViewportProps {
   viewRequest?: { serial: number; view: CameraView };
   assembledResetRequest?: number;
   compactControls?: boolean;
+  toolRequest?: { serial: number; tool: ViewportTool };
+  focusRequest?: number;
 }

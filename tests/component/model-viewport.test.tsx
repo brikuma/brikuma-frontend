@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelViewport } from "../../src/features/editor/components/model-viewport";
 import type {
@@ -24,6 +25,10 @@ vi.mock("next/dynamic", () => ({
       exploded,
       projection,
       rotationPreview,
+      placement,
+      fitSelection,
+      selected,
+      selectedIds,
     }: ModelViewportProps & {
       view: CameraView;
       tool: ViewportTool;
@@ -34,6 +39,7 @@ vi.mock("next/dynamic", () => ({
       exploded: boolean;
       projection: string;
       rotationPreview: number | null;
+      fitSelection: boolean;
     }) {
       return (
         <div>
@@ -43,6 +49,12 @@ vi.mock("next/dynamic", () => ({
           <div data-testid="scene-inspection">{inspectionPartId ?? "Complete model"}</div>
           <div data-testid="scene-model-count">{model.instances.length}</div>
           <div data-testid="scene-fit-request">{fitRequest}</div>
+          <div data-testid="scene-fit-target">
+            {fitSelection ? (selectedIds ?? [selected]).join(",") : "Visible model"}
+          </div>
+          <div data-testid="scene-placement-rotation">
+            {placement?.transform.rotation ?? "No placement"}
+          </div>
           <div data-testid="scene-assembly">
             {exploded ? `${assemblyMode} ${assemblyAmount}` : "Assembled"}
           </div>
@@ -60,6 +72,213 @@ beforeEach(() => {
 });
 
 describe("Specialist camera and rotation controls", () => {
+  it("UX-KEY-001: placement R belongs to the parent and never cancels or commits the ghost", async () => {
+    const user = userEvent.setup();
+    const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
+    function PlacementOwner() {
+      const [pending, setPending] = useState<PlacementPreview | null>(placement);
+      return (
+        <div
+          onKeyDown={(event) => {
+            if (!event.defaultPrevented && event.key.toLowerCase() === "r" && pending) {
+              event.preventDefault();
+              setPending({ ...pending, transform: { ...pending.transform, rotation: 90 } });
+            }
+          }}
+        >
+          <ModelViewport
+            {...props}
+            placement={pending}
+            onCancelPlacement={() => {
+              props.onCancelPlacement?.();
+              setPending(null);
+            }}
+          />
+        </div>
+      );
+    }
+    render(<PlacementOwner />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "r" });
+    expect(screen.getByTestId("scene-placement-rotation")).toHaveTextContent("90");
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    expect(props.onCancelPlacement).not.toHaveBeenCalled();
+    expect(props.onRotate).not.toHaveBeenCalled();
+    expect(props.model.instances).toHaveLength(2);
+  });
+
+  it("UX-KEY-002: Escape cancels one owned transient and consumes the key only when handled", async () => {
+    const user = userEvent.setup();
+    const parent = vi.fn();
+    const props = {
+      ...selectedViewportProps(),
+      onRotate: vi.fn(() => true),
+      onCancelPlacement: vi.fn(),
+    };
+    render(
+      <div onKeyDown={parent}>
+        <ModelViewport {...props} />
+      </div>,
+    );
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+    await user.click(screen.getByRole("button", { name: "Preview +90°" }));
+    props.onCancelPlacement.mockClear();
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
+    expect(screen.getByTestId("scene-rotation-preview")).toHaveTextContent("No rotation preview");
+    expect(screen.getByRole("button", { name: "Select through" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(parent).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
+    expect(screen.getByRole("button", { name: "Select through" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(parent).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
+    expect(parent).toHaveBeenCalledOnce();
+    expect(props.onRotate).not.toHaveBeenCalled();
+    expect(props.onCancelPlacement).not.toHaveBeenCalled();
+  });
+
+  it("UX-KEY-003: numbered views are scoped, consume their event and leave the document untouched", async () => {
+    const user = userEvent.setup();
+    const parent = vi.fn();
+    const props = selectedViewportProps();
+    const before = structuredClone(props.model);
+    render(
+      <div onKeyDown={parent}>
+        <ModelViewport {...props} />
+      </div>,
+    );
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    const viewport = screen.getByTestId("model-viewport");
+    for (const [key, name] of [
+      ["1", "front"],
+      ["2", "right"],
+      ["3", "top"],
+      ["0", "iso"],
+    ]) {
+      fireEvent.keyDown(viewport, { key });
+      expect(screen.getByTestId("scene-camera")).toHaveTextContent(`${name} · select`);
+    }
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("4");
+    expect(parent).not.toHaveBeenCalled();
+    for (const modifier of ["ctrlKey", "metaKey", "altKey"])
+      fireEvent.keyDown(viewport, { key: "1", [modifier]: true });
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    expect(props.model).toEqual(before);
+    expect(props.onMove).not.toHaveBeenCalled();
+  });
+
+  it("UX-KEY-004: text descendants and consumed events do not trigger viewport shortcuts", async () => {
+    const user = userEvent.setup();
+    const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
+    render(<ModelViewport {...props} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    const viewport = screen.getByTestId("model-viewport");
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    const text = document.createElement("span");
+    editable.append(text);
+    viewport.append(editable);
+    for (const target of [text, screen.getByRole("combobox", { name: "Camera projection" })]) {
+      for (const key of ["1", "g", "r", "Escape"]) fireEvent.keyDown(target, { key });
+    }
+    const consumed = document.createElement("button");
+    consumed.addEventListener("keydown", (event) => event.preventDefault());
+    viewport.append(consumed);
+    fireEvent.keyDown(consumed, { key: "1" });
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("0");
+    expect(props.onCancelPlacement).not.toHaveBeenCalled();
+  });
+
+  it("UX-KEY-005: dialog Escape closes only the dialog and preserves the underlying rotation preview", async () => {
+    const user = userEvent.setup();
+    render(<ModelViewport {...selectedViewportProps()} onRotate={vi.fn(() => true)} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+    await user.click(screen.getByRole("button", { name: "Preview +90°" }));
+    const region = screen.getByRole("region", { name: "Interactive brick model: Untitled model" });
+    fireEvent(
+      region,
+      new MouseEvent("pointerdown", { bubbles: true, button: 2, clientX: 10, clientY: 10 }),
+    );
+    fireEvent(
+      region,
+      new MouseEvent("pointerup", { bubbles: true, button: 2, clientX: 10, clientY: 10 }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Context commands" });
+    fireEvent.keyDown(dialog, { key: "3" });
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · rotate");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Context commands" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("scene-rotation-preview")).toHaveTextContent("90");
+  });
+
+  it("UX-KEY-006: explicit tool requests are single-use and mutation tools stay disabled outside Build", async () => {
+    const user = userEvent.setup();
+    const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };
+    const { rerender } = render(
+      <ModelViewport {...props} toolRequest={{ serial: 0, tool: "move" }} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    rerender(<ModelViewport {...props} toolRequest={{ serial: 1, tool: "move" }} />);
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · move");
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("0");
+    rerender(
+      <ModelViewport {...props} mode="inspect" toolRequest={{ serial: 2, tool: "rotate" }} />,
+    );
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "g" });
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "r" });
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    rerender(<ModelViewport {...props} mode="build" toolRequest={{ serial: 2, tool: "rotate" }} />);
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · select");
+    expect(props.onMove).not.toHaveBeenCalled();
+    expect(props.onRotate).not.toHaveBeenCalled();
+  });
+
+  it("UX-KEY-007: focus requests use the current selection exactly once; selection alone never reframes", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const { rerender } = render(<ModelViewport {...props} focusRequest={0} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    rerender(<ModelViewport {...props} selected="brick-2" focusRequest={0} />);
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("0");
+    rerender(
+      <ModelViewport
+        {...props}
+        selected="brick-2"
+        selectedIds={["brick-1", "brick-2"]}
+        focusRequest={1}
+      />,
+    );
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("1");
+    expect(screen.getByTestId("scene-fit-target")).toHaveTextContent("brick-1,brick-2");
+    rerender(<ModelViewport {...props} selected="brick-1" focusRequest={1} />);
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("1");
+    rerender(<ModelViewport {...props} selected={null} selectedIds={[]} focusRequest={2} />);
+    expect(screen.getByTestId("scene-fit-request")).toHaveTextContent("2");
+    expect(screen.getByTestId("scene-fit-target")).toHaveTextContent("Visible model");
+  });
+
+  it.each(["ground", "free"] as const)(
+    "UX-KEY-008: %s placement uses shared policy wording without a validation-success color",
+    (target) => {
+      render(<ModelViewport {...viewportProps()} placement={{ ...placement, target }} />);
+      expect(screen.getByText(target === "ground" ? /· Grid$/ : /· Free position$/)).toBeVisible();
+      expect(screen.getByLabelText("Placement feedback")).not.toHaveClass("text-success");
+      expect(screen.getByLabelText("Placement feedback")).toHaveClass(
+        target === "free" ? "text-warning" : "text-muted-foreground",
+      );
+    },
+  );
   it("EDT-036: compact controls collapse optional tools without removing the single renderer or essential tools", async () => {
     const user = userEvent.setup();
     const props = { ...selectedViewportProps(), onRotate: vi.fn(() => true) };

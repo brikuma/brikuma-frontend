@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:core": "vitest run tests/unit",
     "test:components": "vitest run tests/component",
-    "test:e2e": "playwright test journeys.spec.ts responsive.spec.ts bundle-network.spec.ts editor-specialist.spec.ts",
+    "test:e2e": "playwright test journeys.spec.ts responsive.spec.ts bundle-network.spec.ts editor-specialist.spec.ts editor-ux.spec.ts",
     "test:a11y": "playwright test a11y.spec.ts",
     "architecture:check": "depcruise src --config .dependency-cruiser.cjs --output-type err-long",
     "architecture:test": "node --test tests/architecture/*.test.mjs",
