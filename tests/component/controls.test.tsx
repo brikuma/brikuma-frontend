@@ -10,6 +10,8 @@ import { Structure } from "../../src/features/editor/components/structure";
 import { SelectionInspector } from "../../src/features/editor/components/selection-inspector";
 import { AssistantPreview } from "../../src/features/ai-preview/assistant-preview";
 import { fixture } from "../../src/fixtures/scenes/masseria";
+import { model as blankModel } from "../../src/fixtures/scenes/blank";
+import { model as roverModel } from "../../src/fixtures/scenes/rover";
 
 afterEach(cleanup);
 
@@ -162,7 +164,8 @@ describe("FE-011 / FE-012: truthful pre-authored change preview", () => {
     const command = vi.fn(() => true);
     render(<AssistantPreview model={fixture.model} variant={fixture.variant} command={command} />);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.getByText(/Pre-authored roof alternative/)).toBeVisible();
+    expect(screen.getByRole("region", { name: "Assisted design preview" })).toBeVisible();
+    expect(screen.getByText("Pre-authored sample change · AI is not connected.")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Preview sample change" }));
     const dialog = screen.getByRole("dialog", { name: "A quieter roofline" });
     expect(command).not.toHaveBeenCalled();
@@ -193,5 +196,56 @@ describe("FE-011 / FE-012: truthful pre-authored change preview", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Revision conflict");
     expect(screen.getByRole("button", { name: "Apply pre-authored variant" })).toBeDisabled();
     expect(command).not.toHaveBeenCalled();
+  });
+
+  it.each([blankModel, roverModel])(
+    "explains unavailable assistance for $id without a fabricated proposal",
+    (model) => {
+      const command = vi.fn();
+      render(<AssistantPreview model={model} variant={null} command={command} />);
+      const preview = screen.getByRole("region", { name: "Assisted design preview" });
+      expect(preview).toHaveTextContent(
+        "No pre-authored change is available for this model. AI is not connected.",
+      );
+      expect(within(preview).queryByRole("button")).not.toBeInTheDocument();
+      expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+      expect(command).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps protected groups in the core preview rejection path", async () => {
+    const user = userEvent.setup();
+    const command = vi.fn();
+    render(
+      <AssistantPreview
+        model={{
+          ...fixture.model,
+          groups: fixture.model.groups.map((group) =>
+            group.id === "roof" ? { ...group, protected: true } : group,
+          ),
+        }}
+        variant={fixture.variant}
+        command={command}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Preview sample change" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Roof is protected");
+    expect(screen.getByRole("button", { name: "Apply pre-authored variant" })).toBeDisabled();
+    expect(command).not.toHaveBeenCalled();
+  });
+
+  it("keeps a rejected apply open and clears its error when the user previews again", async () => {
+    const user = userEvent.setup();
+    const command = vi.fn(() => false);
+    render(<AssistantPreview model={fixture.model} variant={fixture.variant} command={command} />);
+    await user.click(screen.getByRole("button", { name: "Preview sample change" }));
+    await user.click(screen.getByRole("button", { name: "Apply pre-authored variant" }));
+    expect(screen.getByRole("dialog", { name: "A quieter roofline" })).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent("This change was rejected.");
+    expect(command).toHaveBeenCalledOnce();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Preview sample change" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(command).toHaveBeenCalledOnce();
   });
 });

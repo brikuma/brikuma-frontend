@@ -16,6 +16,8 @@ import { serializeProject } from "../../src/core/model/public";
 import { editPolicy } from "../../src/fixtures/catalog";
 import { fixture } from "../../src/fixtures/editor/placement-lab";
 
+import { ProjectContextProvider } from "../../src/features/project-brief/project-context";
+
 const createObjectURL = vi.fn(() => "blob:editor-reference");
 const revokeObjectURL = vi.fn();
 const OriginalURL = URL;
@@ -106,7 +108,7 @@ describe("Editor local workflow HTML contracts", () => {
   });
   it("EDT-044: handles decode failure and revokes every local image URL", async () => {
     const user = userEvent.setup();
-    const view = render(<EditorReferences />);
+    const view = render(<EditorReferences />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose local images"),
       new File(["image"], "wall.png", { type: "image/png" }),
@@ -122,7 +124,7 @@ describe("Editor local workflow HTML contracts", () => {
     view.unmount();
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
-  it("EDT-044: workbench-owned references survive panel closure and release at editor unmount", async () => {
+  it("EDT-044: project-owned references survive panel closure and release at session unmount", async () => {
     function Panels() {
       const state = useEditorReferences();
       const [visible, setVisible] = useState(true);
@@ -134,7 +136,7 @@ describe("Editor local workflow HTML contracts", () => {
       );
     }
     const user = userEvent.setup();
-    const view = render(<Panels />);
+    const view = render(<Panels />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose local images"),
       new File(["image"], "wall.png", { type: "image/png" }),

@@ -15,7 +15,7 @@ These are documentation observations accessed on the checked date. The pages do 
 
 The specialist execution brief also supplied Mecabricks forum references about interaction interruption, selection/group discoverability, touch workflows and ghost parts. Those threads were **not reverified in this implementation pass**. Their dates and software versions remain unestablished here. They are historical scenario inputs, not evidence of current defects, prevalence, absence of grouping or a verified disputed Save As failure. No competitor models, renders, branding or proprietary part assets are used as BRIKUMA output.
 
-The extended companion research note and original planning Word documents are not required to justify the implemented bounded editor. This document does not claim to have read unavailable conversations or source documents. Existing reference provenance is maintained in [the canonical reference record](../references/README.md).
+The later supplied D1/D2 v0.0.3 Markdown documents now ground the [product-alignment map](../product/BASELINE_ALIGNMENT.md); original Word binaries and D3 remain unavailable. The historical competitor observations above are unchanged by that source review. No unavailable conversation or source document is claimed read. Existing reference provenance is maintained in [the canonical reference record](../references/README.md).
 
 ## Testable hypotheses and implemented limits
 

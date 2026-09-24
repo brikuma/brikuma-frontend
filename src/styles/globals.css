@@ -114,7 +114,7 @@
     @apply text-muted-foreground hover:bg-surface-muted hover:text-foreground;
   }
   .project-navigation {
-    @apply flex min-h-9 min-w-0 items-center gap-0.5 overflow-x-auto rounded-md bg-surface-muted p-0.5;
+    @apply flex min-h-9 min-w-0 shrink-0 items-center gap-0.5 overflow-x-auto rounded-md bg-surface-muted p-0.5;
   }
   .project-navigation a {
     @apply flex min-h-8 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium transition-colors;

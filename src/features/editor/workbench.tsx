@@ -38,6 +38,8 @@ import {
   EditorReplacement,
 } from "./components/editor-workflows";
 import { ProjectNavigation } from "@/components/shell/project-navigation";
+import { AssistantPreview } from "@/features/ai-preview/assistant-preview";
+import { ProjectBriefSummary } from "@/features/project-brief/brief-summary";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { partDefinitions, editPolicy } from "@/fixtures/catalog";
@@ -76,7 +78,7 @@ export function Workbench() {
   );
 }
 function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }) {
-  const referenceState = useEditorReferences();
+  const referenceState = useEditorReferences(project.id);
   const width = useSyncExternalStore(subscribeWidth, readWidth, serverWidth);
   const { model: loadedModel, entry: loadedEntry, message, history, reset } = project;
   const model = loadedModel!;
@@ -370,8 +372,9 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     setMode("inspect");
     setPending(null);
   }
-  function opened(fixture: SceneFixture) {
-    project.replaceFixture(fixture);
+  function opened(fixture: SceneFixture, source: "sample" | "file" = "sample") {
+    if (source === "file") project.replaceModel(fixture.model);
+    else project.replaceFixture(fixture);
     setCheckResult(null);
     setSelected([]);
     setHidden(fixture.initiallyHiddenIds ?? []);
@@ -610,7 +613,10 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             </Button>
           </>
         ) : (
-          <EditorReferences state={referenceState} />
+          <>
+            <ProjectBriefSummary projectId={project.id} />
+            <EditorReferences state={referenceState} />
+          </>
         )}
       </div>
     </div>
@@ -808,6 +814,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       }
       onKeyDown={shortcut}
     >
+      <ProjectNavigation id={project.id} active="editor" />
       <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-surface px-3 py-1.5">
         <div className="min-w-0">
           <h1 className="truncate text-sm">{model.title}</h1>
@@ -1065,6 +1072,19 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           </aside>
         )}
       </div>
+      <AssistantPreview
+        model={model}
+        variant={entry.fixture.variant}
+        command={(value) => {
+          if (!command(value)) return false;
+          setPending(null);
+          setSelected([]);
+          setSelectedGroup(null);
+          setCheckResult(null);
+          clearPresentation();
+          return true;
+        }}
+      />
       <div className="shrink-0 border-t bg-surface">
         <button
           className="flex min-h-10 w-full items-center justify-between px-4 text-left text-xs"
@@ -1150,7 +1170,6 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         title="Local project files"
         description="Explicit downloads and loads only. Nothing is uploaded or saved automatically."
       >
-        <ProjectNavigation id={project.id} active="editor" />
         <details className="my-4">
           <summary className="min-h-10 py-2 text-sm">Panel widths</summary>
           <div className="grid grid-cols-2 gap-3">
@@ -1183,15 +1202,19 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         <EditorFiles
           model={model}
           policy={editPolicy}
-          dirty={entry.session.past.length > 0}
-          onLoad={(value) => opened({ model: value, variant: null, instructions: null })}
+          dirty={entry.session.past.length > 0 || project.hasContext}
+          onLoad={(value) => opened({ model: value, variant: null, instructions: null }, "file")}
         />
         <div className="mt-6 border-t pt-4">
           <h2 className="text-base">Original studies</h2>
           <p className="mt-2 text-xs text-muted-foreground">
-            Opening a study replaces this session. Download first to retain edits.
+            Opening a study replaces this model and clears its brief and references. Downloads
+            retain geometry only; copy any brief notes you need before replacing them.
           </p>
-          <SampleChooser dirty={entry.session.past.length > 0} onOpen={opened} />
+          <SampleChooser
+            dirty={entry.session.past.length > 0 || project.hasContext}
+            onOpen={opened}
+          />
           <Link href="/editor/?project=blank" className="button mt-3">
             Open empty project
           </Link>

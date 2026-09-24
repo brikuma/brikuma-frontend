@@ -8,6 +8,8 @@ import {
   validateReference,
 } from "../../src/features/project-brief/reference-picker";
 
+import { ProjectContextProvider } from "../../src/features/project-brief/project-context";
+
 const createObjectURL = vi.fn(() => "blob:local-reference");
 const revokeObjectURL = vi.fn();
 const OriginalURL = URL;
@@ -42,7 +44,7 @@ describe("FE-003: browser-session reference selection", () => {
 
   it("previews a local image and revokes its URL on removal", async () => {
     const user = userEvent.setup();
-    render(<ReferencePicker />);
+    render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
       new File(["image bytes"], "courtyard.png", { type: "image/png" }),
@@ -56,7 +58,7 @@ describe("FE-003: browser-session reference selection", () => {
 
   it("shows PDF filename metadata without creating a preview or parsing it", async () => {
     const user = userEvent.setup();
-    render(<ReferencePicker />);
+    render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
       new File(["example"], "reference.pdf", { type: "application/pdf" }),
@@ -68,7 +70,7 @@ describe("FE-003: browser-session reference selection", () => {
 
   it("shows a useful error for unsupported input while retaining valid references", async () => {
     const user = userEvent.setup({ applyAccept: false });
-    render(<ReferencePicker />);
+    render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     const fileInput = screen.getByLabelText("Choose reference files");
     await user.upload(fileInput, new File(["document"], "brief.pdf", { type: "application/pdf" }));
     await user.upload(fileInput, new File(["<svg/>"], "unsafe.svg", { type: "image/svg+xml" }));
@@ -79,7 +81,7 @@ describe("FE-003: browser-session reference selection", () => {
 
   it("removes undecodable images and releases their object URL", async () => {
     const user = userEvent.setup();
-    render(<ReferencePicker />);
+    render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
       new File(["broken bytes"], "broken.png", { type: "image/png" }),
@@ -91,9 +93,27 @@ describe("FE-003: browser-session reference selection", () => {
     expect(revokeObjectURL).toHaveBeenCalledOnce();
   });
 
+  it("rejects decoded images above the shared 40-million-pixel limit", async () => {
+    const user = userEvent.setup();
+    render(<ReferencePicker />, { wrapper: ProjectContextProvider });
+    await user.upload(
+      screen.getByLabelText("Choose reference files"),
+      new File(["image bytes"], "large.png", { type: "image/png" }),
+    );
+    const image = screen.getByRole("img", { name: "large.png" }).querySelector("img")!;
+    Object.defineProperties(image, {
+      naturalWidth: { value: 8000 },
+      naturalHeight: { value: 6000 },
+    });
+    fireEvent.load(image);
+    expect(screen.getByRole("alert")).toHaveTextContent("no more than 40 million pixels");
+    expect(screen.queryByRole("img", { name: "large.png" })).not.toBeInTheDocument();
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
+  });
+
   it("releases live image URLs on unmount", async () => {
     const user = userEvent.setup();
-    const { unmount } = render(<ReferencePicker />);
+    const { unmount } = render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
       new File(["image bytes"], "local.webp", { type: "image/webp" }),

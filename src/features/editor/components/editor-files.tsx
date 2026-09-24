@@ -45,8 +45,9 @@ export function EditorFiles({
   return (
     <section aria-label="Local project files" className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Explicit project files preserve this model and stable part IDs. No cloud save or automatic
-        persistence.
+        Downloads preserve geometry and stable part IDs. Brief notes, reference files and manual
+        reference scales are session-only and are not included. Loading another model clears them.
+        No cloud save or automatic persistence.
       </p>
       <Button
         onClick={() => {
@@ -126,7 +127,7 @@ export function EditorFiles({
           if (!open) setPending(null);
         }}
         title="Replace this local model?"
-        description="The selected file has been validated. Loading it replaces your current model and undo history. Download your current work first if you want to keep it."
+        description="The selected file has been validated. Loading it replaces your current model, undo history, brief and references. Download the geometry and copy any brief notes you need before replacing them. Reference files and scales are not included in downloads."
       >
         <p className="mb-4 text-sm">
           {pending?.title} · {pending?.instances.length} parts

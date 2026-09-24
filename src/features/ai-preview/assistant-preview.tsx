@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Sparkles, ArrowUpRight, LockKeyhole } from "lucide-react";
 import {
   previewVariant,
@@ -23,21 +23,45 @@ export function AssistantPreview({
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
-  const preview = variant ? previewVariant(model, variant, editPolicy) : null;
+  const preview = useMemo(
+    () => (variant ? previewVariant(model, variant, editPolicy) : null),
+    [model, variant],
+  );
   const compatible = preview?.ok === true;
-  if (!variant) return null;
+  if (!variant)
+    return (
+      <section
+        aria-label="Assisted design preview"
+        className="shrink-0 space-y-1 border-t bg-surface px-4 py-2"
+      >
+        <p className="flex items-center gap-2 text-xs font-medium">
+          <Sparkles size={14} className="text-primary" /> Assisted design preview
+        </p>
+        <p className="text-xs text-muted-foreground">
+          No pre-authored change is available for this model. AI is not connected.
+        </p>
+      </section>
+    );
   return (
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-surface px-4 py-1.5">
-      <p className="flex items-center gap-2 text-xs font-medium">
-        <Sparkles size={14} className="text-primary" /> Design study
-        <span className="hidden font-normal text-muted-foreground sm:inline">
-          · Pre-authored roof alternative
-        </span>
-      </p>
+    <section
+      aria-label="Assisted design preview"
+      className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-surface px-4 py-2"
+    >
+      <div className="space-y-1">
+        <p className="flex items-center gap-2 text-xs font-medium">
+          <Sparkles size={14} className="text-primary" /> Assisted design preview
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Pre-authored sample change · AI is not connected.
+        </p>
+      </div>
       <Button
         variant="quiet"
         className="min-h-8 px-2 py-1 text-xs text-primary"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setError("");
+          setOpen(true);
+        }}
       >
         Preview sample change
         <ArrowUpRight size={14} />
@@ -118,6 +142,6 @@ export function AssistantPreview({
           </>
         )}
       </Dialog>
-    </div>
+    </section>
   );
 }

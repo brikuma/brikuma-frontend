@@ -1,6 +1,16 @@
 # Frontend handoff
 
-ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, editor discovery and selection follow-up.
+ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, product continuity follow-up.
+
+## Current product checkpoint
+
+The follow-up to `0af5d77` restores the reachable pre-authored assisted-design preview and direct Brief/Workbench/Instructions/Parts inventory navigation. Brief intent, style, construction system, technique, intended use and constraints remain separate. Each existing project slot retains its brief, local images, PDF metadata and manual calibration across client-side routes. Editing this context does not change geometry, quantities or revision. Explicit replacement clears it after confirmation, including metadata-only changes; reset preserves it. Reload clears it, and scene downloads explicitly exclude brief/reference context.
+
+The supplied D1/D2 v0.0.3 Markdown now has a [requirement/invariant mapping](../product/BASELINE_ALIGNMENT.md); D3 is unavailable. The [capability table](../product/FRONTEND_SCOPE.md#capability-coverage) distinguishes the implemented subset from real parts, SNOT/Technic, real generation, general instruction planning and commerce. Those broader product requirements remain intact.
+
+The [current execution ledger](../delivery/ACCEPTANCE.md#product-continuity-follow-up--2026-09-24) records 351 passing deterministic tests, final focused regressions, 40 browser journeys, 10 accessibility checks, a rebuilt static export, visual inspection and passing bundle budgets. Initial working-tree Node/npm were 22.23.3/12.1.0, not the declared pins; no dependency or lockfile changed. Independent code review findings were corrected. That checkpoint did not include a current audit or hardware measurements. Its identities and logs are recorded in `artifacts/continuity-manifest.json`. The subsequently authorized commit cycle uses fresh exact-staged verification/review under `artifacts/quality/`; resulting commit identities and actual hook logs belong to `artifacts/continuity-commit-manifest.json`.
+
+## Previous editor checkpoint
 
 The specialist editor was committed as `335a332`, followed by tracked pattern skills in `7fb1b97`. This follow-up extends that baseline with catalog search/favorites/committed recents, selection summaries, atomic multi-part duplication, persistent diagnostic drill-in and scoped shortcuts. A real short-window catalog/canvas stretching defect found during screenshot review was corrected with contained panel scrolling. Other product routes are preserved. The frontend remains an independent Git repository; no approved child remotes or root gitlinks exist. No push, remote creation, deployment, backend or infrastructure implementation is included.
 

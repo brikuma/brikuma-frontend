@@ -24,6 +24,10 @@ import { editPolicy } from "@/fixtures/catalog";
 import { loadScene } from "@/fixtures/load-scene";
 import type { SceneFixture } from "@/fixtures/scene-types";
 import { parseProjectId, type ProjectId } from "@/fixtures/projects";
+import {
+  ProjectContextProvider,
+  useProjectContext,
+} from "@/features/project-brief/project-context";
 
 type Entry = { session: ModelSession; fixture: SceneFixture };
 type State = Partial<Record<ProjectId, Entry>>;
@@ -58,13 +62,24 @@ function reducer(state: State, action: Action): State {
 const Context = createContext<{ state: State; dispatch: React.Dispatch<Action> } | null>(null);
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, {});
-  return <Context.Provider value={{ state, dispatch }}>{children}</Context.Provider>;
+  return (
+    <ProjectContextProvider>
+      <Context.Provider value={{ state, dispatch }}>{children}</Context.Provider>
+    </ProjectContextProvider>
+  );
+}
+/** Read an already loaded session without loading geometry for the brief route. */
+export function useProjectTitle(id: ProjectId) {
+  const context = useContext(Context);
+  if (!context) throw new Error("SessionProvider is required");
+  return context.state[id]?.session.present.title;
 }
 export function useProject() {
   const context = useContext(Context);
   if (!context) throw new Error("SessionProvider is required");
   const params = useSearchParams();
   const { id, invalid } = parseProjectId(params.get("project"));
+  const { clearProjectContext, hasContext } = useProjectContext(id);
   const { state, dispatch } = context;
   const entry = state[id];
   const [message, setMessage] = useState("");
@@ -113,6 +128,7 @@ export function useProject() {
     model: entry?.session.present,
     message,
     loadError,
+    hasContext,
     command,
     history,
     acceptExperiment: (preview: ExperimentPreview) => {
@@ -127,10 +143,12 @@ export function useProject() {
       return true;
     },
     replaceModel: (model: Model) => {
+      clearProjectContext();
       dispatch({ type: "replace", id, fixture: { model, variant: null, instructions: null } });
       setMessage("Local project loaded. No upload or cloud save occurred.");
     },
     replaceFixture: (fixture: SceneFixture) => {
+      clearProjectContext();
       dispatch({ type: "replace", id, fixture });
       setMessage("Original local sample opened.");
     },

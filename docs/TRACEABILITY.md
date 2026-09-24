@@ -4,13 +4,17 @@ ID: FE-TRACE-001
 
 Owner/scope: frontend repository
 
-Status: Current local studio checks passed; integration and candidate review pending
+Status: Historical execution records retained; product-continuity checks recorded in acceptance
 
 Baseline: execution brief 1.1.0 / consolidated product v0.0.3, 2026-09-24.
 
-All `FE-*` IDs below come from execution brief 1.1.0 §11. They do not map to unavailable original v0.0.3 Word IDs. Global source: [product context](../../docs/PROJECT_CONTEXT.md); canonical source limitations: [source register](../../docs/SOURCES.md).
+All `FE-*` IDs below come from execution brief 1.1.0 §11. The owner has now supplied D1 and D2 v0.0.3 in Markdown. Their original F/PF/UC/INV identifiers map to this frontend subset in [baseline alignment](product/BASELINE_ALIGNMENT.md), with partial/deferred scope explicit. D3 remains unavailable. The [frontend source register](SOURCES.md) owns exact availability and review limits; [product context](../../docs/PROJECT_CONTEXT.md) owns the global boundary.
 
 Implementation links below resolve to current authored files. Passing status is limited to the named evidence; later source changes require relevant rechecks. See [acceptance](delivery/ACCEPTANCE.md) for the current execution checkpoint and limitations.
+
+## Recorded frontend baseline
+
+The table preserves historical implementation/evidence references. Its passing entries are not a blanket pass for subsequent changes, including the product-continuity follow-up below.
 
 | Requirement | Result                                                         | Specification                                       | Implementation                                                             | Relevant tests                                                | Status                                                                                                                                               |
 | ----------- | -------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -58,3 +62,9 @@ The EDR-001–036 register, source/hypothesis links, owning files, EDT acceptanc
 The later user-supplied master UX brief is applied to the existing editor in this slice. FE-007 / EDR-002 gain normalized catalog search, visible original IDs, favorites, committed recents and a used-parts filter. FE-004–006 / EDR-005,007,012 gain aggregate selection properties and atomic multi-part duplication. FE-010 / EDR-010,013 gain persistent revision-bound checks and direct selection/focus of affected IDs. FE-019 / EDR-016,017 gain scoped placement/viewport shortcuts and bounded short-window panels.
 
 Contracts are in [experience](editor/EXPERIENCE.md) and [modeling](editor/MODELING.md). Pure rejection/history coverage is in [duplicate-selection tests](../tests/unit/duplicate-selection.test.ts); HTML integration in [editor interaction tests](../tests/component/editor-interactions.test.tsx); actual canvas, keyboard, responsive and visibility regressions in [UX browser tests](../tests/e2e/editor-ux.spec.ts). Their executed results and limits belong to [editor evidence](editor/EVIDENCE.md). The broader master brief, human usability results and unimplemented clipboard/marquee/measurement workflows are not claimed complete.
+
+## Product continuity follow-up
+
+The owner-authorized follow-up restores FE-011/012's reachable pre-authored roof proposal, connects FE-003/013's brief and local references to the project browser session, retains EDR-024 image/calibration context across project navigation, and exposes FE-008/009's parts/instruction routes directly from the workbench. Visual language, construction system, technique, intended use and constraints remain distinct. It does not add real AI, a backend, PDF analysis, durable persistence or manufacturing validation.
+
+[Baseline alignment](product/BASELINE_ALIGNMENT.md) maps D1/D2 requirements and invariants; [scope](product/FRONTEND_SCOPE.md#capability-coverage) states the capability matrix; [journeys](product/USER_FLOWS.md) and [screens](design/SCREENS.md) define the changed contracts. The [current acceptance ledger](delivery/ACCEPTANCE.md#product-continuity-follow-up--2026-09-24) distinguishes the initial working-tree checks from the subsequently authorized exact-staged verification/review records. The documentation mapping alone is not test evidence.

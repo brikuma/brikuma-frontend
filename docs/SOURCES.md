@@ -8,7 +8,15 @@ Status: Specified
 
 Baseline: execution brief 1.1.0 / consolidated product v0.0.3, 2026-09-24.
 
-Reference date: 2026-09-24. The supplied execution brief 1.1.0 is the executable product/frontend source. The [global register](../../docs/SOURCES.md) records unavailable original documents, the absent screenshot and unrecovered ChatGPT share. No original Word feature mapping is asserted.
+Reference date: 2026-09-24. The supplied execution brief 1.1.0 and later owner instructions define the frontend assignment. The owner subsequently supplied the two v0.0.3 Markdown documents below. They now ground the [D1/D2 frontend alignment](product/BASELINE_ALIGNMENT.md); their original IDs are mapped without claiming full product delivery. The [global register](../../docs/SOURCES.md) owns cross-repository provenance, and [asset provenance](references/README.md) records the later inspection of the shared visual references.
+
+| Supplied baseline                                              | Inspection and use                                                                                                                                                                 | Remaining limit                                                                                    |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| D1: `01_BRIKUMA_Prodotto_Requisiti_Business_v0.0.3.md`         | Supplied Markdown read for product intent, F01–F72, PF01–PF16 and UC01–UC18; relevant frontend mapping recorded.                                                                   | Product requirements are broader than the current frontend-only implementation.                    |
+| D2: `02_BRIKUMA_Architettura_Contratti_Affidabilita_v0.0.3.md` | Supplied Markdown inspected for model/commands, catalog/capabilities, references, revision invalidation, BOM/instructions, interoperability, INV01–INV24 and applicable standards. | Proposed contracts are not proof that a backend, physical validator or production pipeline exists. |
+| D3: delivery, gates and acceptance companion                   | Not supplied in this task.                                                                                                                                                         | Original D3 user-story/test/gate completion is not asserted.                                       |
+
+The original Word binaries and the initially named local FORMA screenshot are still absent. That historical file absence no longer means D1/D2 product content is unavailable. The supplied Markdown is source material, not a shipped application asset; private attachments are not copied into the public demo.
 
 Version-specific framework, packages, tool APIs, issues/advisories and licenses are tracked in [dependency evidence](engineering/DEPENDENCIES.md); do not infer their review from this link list.
 
