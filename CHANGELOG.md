@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reuse the editor's fixed environment lighting across model and presentation updates without changing its appearance or quality settings.
 - Preview single-piece moves and rotations before applying them, preserving part identity and checked attachment with one-step undo.
 - Keep pending brick rotations aligned, recover nearby attachments after floor placement, and show current Undo/Redo feedback.
 - Resume current work from the workspace, place supported bricks with simpler previews, and inspect individual model layers.

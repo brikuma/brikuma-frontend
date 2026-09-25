@@ -12,6 +12,12 @@ Browser minimums: Next 16.3.6 documents Chrome/Edge 111+, Firefox 111+, Safari 1
 
 Sources: [Web Vitals](https://web.dev/articles/vitals), [Fiber performance](https://r3f.docs.pmnd.rs/advanced/scaling-performance), [Tailwind compatibility](https://tailwindcss.com/docs/compatibility), [Next supported browsers](https://nextjs.org/docs/architecture/supported-browsers).
 
+## Fixed environment lifetime
+
+The editor's fixed environment lighting is independent of model edits, selection, camera state and assembly presentation. Its subtree must retain identity across those updates and across Auto/Quality changes. Performance omits the environment; returning to a profile that uses it may create a fresh capture. Preserve the light geometry, intensities, environment resolution and existing visual-quality choices.
+
+In installed Drei 10.7.8, `EnvironmentPortal` recaptures its cube texture when `children` changes even with `frames={1}`. The [scene](../../src/features/editor/scene/model-scene.tsx) therefore isolates the fixed light subtree behind a memoized component. The [scene regressions](../../tests/component/model-scene-interaction.test.tsx) model that dependency to check capture reuse and remount behavior. These lifecycle checks do not measure GPU time, prove a frame-rate improvement or establish hosted browser acceptance; actual outcomes belong in [acceptance](../delivery/ACCEPTANCE.md#fixed-environment-capture--2026-09-25).
+
 ## Editor specialist measurements — 2026-09-24
 
 At 13:03:41 UTC, `node scripts/editor-performance.mjs` completed with exit 0 against the production static export after the comparison-view reset correction, with no concurrent browser/test workload. Toolchain: pinned Node 22.23.2/npm 10.9.8. Profile: Chrome 153.0.8010.53 headless, Darwin 27.0.0 ARM64, Apple M2 CPU and ANGLE Metal Apple M2 renderer, 1440×900 CSS pixels, DPR 1, Auto conservative quality, reduced motion, loopback network and no CPU/network throttle. This measured the uncommitted candidate based on `8f8e9190b3ec8d6cf77db78e2aec11a4d39df4a4`, build `JX50FHqhYGX3BumJv2qHZ`. The report retains exported HTML and fixture source SHA-256 values; the Git diff hash alone does not include untracked source.

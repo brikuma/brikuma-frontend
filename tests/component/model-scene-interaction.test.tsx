@@ -20,6 +20,7 @@ const boundary = vi.hoisted(() => ({
   canvas: null as HTMLCanvasElement | null,
   gl: { domElement: null as HTMLCanvasElement | null },
   invalidate: vi.fn(),
+  environmentCaptures: vi.fn(),
   batch: null as ComponentProps<typeof PartBatch> | null,
   camera: null as ComponentProps<typeof CameraRig> | null,
   ghost: null as ComponentProps<typeof PlacementGhost> | null,
@@ -54,7 +55,13 @@ vi.mock("@react-three/fiber", () => ({
   useThree: () => ({ gl: boundary.gl, invalidate: boundary.invalidate }),
 }));
 vi.mock("@react-three/drei", () => ({
-  Environment: () => null,
+  Environment: ({ children }: { children: ReactNode }) => {
+    // Drei's one-frame environment captures again when its children change.
+    useLayoutEffect(() => {
+      boundary.environmentCaptures();
+    }, [children]);
+    return null;
+  },
   Grid: () => null,
   Lightformer: () => null,
   Line: ({ points }: { points: readonly (readonly number[])[] }) => (
@@ -113,6 +120,7 @@ vi.mock("../../src/features/editor/scene/part-batch", () => ({
 }));
 
 beforeEach(() => {
+  boundary.environmentCaptures.mockClear();
   boundary.batch = null;
   boundary.ghost = null;
   boundary.canvas = document.createElement("canvas");
@@ -198,6 +206,38 @@ function clickPart(part: SceneProps["model"]["instances"][number], x = 0) {
   } as unknown as Parameters<ComponentProps<typeof PartBatch>["onPick"]>[0];
   act(() => boundary.batch!.onPick(event, part));
 }
+
+describe("Shared environment capture", () => {
+  it("reuses fixed lighting across model edits, selection and assembly presentation", () => {
+    const initial = { ...props(), quality: "standard" as const };
+    const { rerender } = render(<ModelScene {...initial} />);
+    expect(boundary.environmentCaptures).toHaveBeenCalledTimes(1);
+
+    rerender(<ModelScene {...initial} selected={null} zoom={2} />);
+    rerender(
+      <ModelScene
+        {...initial}
+        model={{ ...initial.model, revision: "environment-edit" }}
+        exploded
+        assemblyAmount={0.5}
+      />,
+    );
+    expect(boundary.environmentCaptures).toHaveBeenCalledTimes(1);
+  });
+
+  it("captures a fresh environment when returning from Performance quality", () => {
+    const initial = props();
+    const { rerender } = render(<ModelScene {...initial} />);
+    expect(boundary.environmentCaptures).not.toHaveBeenCalled();
+    rerender(<ModelScene {...initial} quality="standard" />);
+    expect(boundary.environmentCaptures).toHaveBeenCalledTimes(1);
+    rerender(<ModelScene {...initial} quality="studio" />);
+    expect(boundary.environmentCaptures).toHaveBeenCalledTimes(1);
+    rerender(<ModelScene {...initial} quality="low" />);
+    rerender(<ModelScene {...initial} quality="standard" />);
+    expect(boundary.environmentCaptures).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("Single-piece reposition gestures", () => {
   it("ignores out-of-scope attachment surfaces while allowing an eligible surface", () => {

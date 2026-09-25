@@ -1,5 +1,6 @@
 "use client";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -81,6 +82,36 @@ interface DragSession extends DragPreview {
   moved: boolean;
   revision: string;
 }
+
+// Stable children prevent Drei from recapturing this fixed environment on edits.
+const SceneEnvironment = memo(function SceneEnvironment() {
+  return (
+    <Environment frames={1} resolution={128} environmentIntensity={0.45}>
+      <Lightformer
+        form="rect"
+        intensity={3}
+        position={[-10, 14, 4]}
+        scale={[12, 10, 1]}
+        target={[0, 0, 0]}
+      />
+      <Lightformer
+        form="rect"
+        intensity={1.5}
+        position={[10, 7, -8]}
+        scale={[8, 12, 1]}
+        target={[0, 0, 0]}
+      />
+      <Lightformer
+        form="rect"
+        intensity={0.6}
+        position={[2, 5, 12]}
+        scale={[10, 5, 1]}
+        target={[0, 0, 0]}
+      />
+    </Environment>
+  );
+});
+
 function SceneContents(props: SceneProps) {
   const {
     model,
@@ -594,31 +625,7 @@ function SceneContents(props: SceneProps) {
       )}
       <ambientLight intensity={0.13} />
       <hemisphereLight args={[colors[11].hex, colors[2].hex, 0.6]} />
-      {quality !== "low" && (
-        <Environment frames={1} resolution={128} environmentIntensity={0.45}>
-          <Lightformer
-            form="rect"
-            intensity={3}
-            position={[-10, 14, 4]}
-            scale={[12, 10, 1]}
-            target={[0, 0, 0]}
-          />
-          <Lightformer
-            form="rect"
-            intensity={1.5}
-            position={[10, 7, -8]}
-            scale={[8, 12, 1]}
-            target={[0, 0, 0]}
-          />
-          <Lightformer
-            form="rect"
-            intensity={0.6}
-            position={[2, 5, 12]}
-            scale={[10, 5, 1]}
-            target={[0, 0, 0]}
-          />
-        </Environment>
-      )}
+      {quality !== "low" && <SceneEnvironment />}
       <primitive object={lightTarget} />
       <directionalLight
         position={[center.x - 14, center.y + 50, center.z + 12]}
