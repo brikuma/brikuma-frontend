@@ -22,6 +22,7 @@ vi.mock("next/dynamic", () => ({
       fitRequest,
       assemblyMode,
       assemblyAmount,
+      assemblyFocusId,
       exploded,
       projection,
       rotationPreview,
@@ -29,7 +30,7 @@ vi.mock("next/dynamic", () => ({
       fitSelection,
       selected,
       selectedIds,
-      navigation,
+      primaryOrbit,
       selectThrough,
       onPickCandidates,
     }: ModelViewportProps & {
@@ -39,11 +40,12 @@ vi.mock("next/dynamic", () => ({
       fitRequest: number;
       assemblyMode: string;
       assemblyAmount: number;
+      assemblyFocusId?: string;
       exploded: boolean;
       projection: string;
       rotationPreview: number | null;
       fitSelection: boolean;
-      navigation: string;
+      primaryOrbit: boolean;
       selectThrough: boolean;
       onPickCandidates: (ids: readonly string[]) => void;
     }) {
@@ -51,7 +53,7 @@ vi.mock("next/dynamic", () => ({
         <div>
           <div data-testid="scene-camera">{`${view} · ${tool}`}</div>
           <div data-testid="scene-projection">{projection}</div>
-          <div data-testid="scene-navigation">{navigation}</div>
+          <div data-testid="scene-primary-orbit">{String(primaryOrbit)}</div>
           {selectThrough && (
             <button onClick={() => onPickCandidates(["brick-2", "brick-1"])}>
               Mock overlapping surfaces
@@ -70,6 +72,7 @@ vi.mock("next/dynamic", () => ({
           <div data-testid="scene-assembly">
             {exploded ? `${assemblyMode} ${assemblyAmount}` : "Assembled"}
           </div>
+          <div data-testid="scene-layer">{assemblyFocusId ?? "All layers"}</div>
         </div>
       );
     },
@@ -106,40 +109,66 @@ describe("Specialist camera and rotation controls", () => {
         "aria-pressed",
         "false",
       );
-      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("trackpad");
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("true");
 
       await user.click(screen.getByRole("button", { name }));
       expect(orbit).toHaveAttribute("aria-pressed", "false");
       expect(screen.getByRole("button", { name })).toHaveAttribute("aria-pressed", "true");
-      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
     },
   );
 
-  it("enables one-finger Orbit for a coarse pointer and keeps the advanced device preference", async () => {
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn((query: string) => ({ matches: query === "(pointer: coarse)" })),
-    );
+  it.each([false, true])(
+    "uses the same Orbit control without choosing a device, coarse pointer: %s",
+    async (coarse) => {
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn((query: string) => ({ matches: coarse && query === "(pointer: coarse)" })),
+      );
+      const user = userEvent.setup();
+      render(<ModelViewport {...selectedViewportProps()} />);
+      await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
+      await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("true");
+      expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      openViewTools();
+      expect(screen.queryByRole("combobox", { name: "Camera controls" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
+      expect(screen.getByRole("button", { name: "Select tool" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    },
+  );
+
+  it("keeps primary gestures for a pending brick even when Orbit was active", async () => {
     const user = userEvent.setup();
-    render(<ModelViewport {...selectedViewportProps()} />);
+    const props = selectedViewportProps();
+    const { rerender } = render(<ModelViewport {...props} />);
     await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
     await user.click(screen.getByRole("button", { name: "Navigate camera" }));
-    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("touch");
-    await user.click(screen.getByRole("button", { name: "Select tool" }));
-    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
-    openViewTools();
-    const device = screen.getByRole("combobox", { name: "Camera controls" });
-    expect(device).toHaveValue("touch");
-    await user.selectOptions(device, "trackpad");
-    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("trackpad");
+    expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("true");
+    rerender(
+      <ModelViewport
+        {...props}
+        placement={{
+          partId: "demo-brick-2x4",
+          colorId: "ivory",
+          target: "ground",
+          transform: { x: 8, y: 0.6, z: 0, rotation: 0 },
+        }}
+      />,
+    );
+    expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
     expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
       "aria-pressed",
-      "true",
+      "false",
     );
-    await user.click(screen.getByRole("button", { name: "Select tool" }));
-    await user.click(screen.getByRole("button", { name: "Navigate camera" }));
-    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("trackpad");
-    expect(device).toHaveValue("trackpad");
   });
 
   it("exits Orbit for keyboard and externally requested editing tools", async () => {
@@ -150,7 +179,7 @@ describe("Specialist camera and rotation controls", () => {
     for (const key of ["v", "g", "r"]) {
       await user.click(screen.getByRole("button", { name: "Navigate camera" }));
       fireEvent.keyDown(screen.getByTestId("model-viewport"), { key });
-      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
       expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
         "aria-pressed",
         "false",
@@ -158,7 +187,7 @@ describe("Specialist camera and rotation controls", () => {
     }
     await user.click(screen.getByRole("button", { name: "Navigate camera" }));
     rerender(<ModelViewport {...props} toolRequest={{ serial: 1, tool: "move" }} />);
-    expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+    expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
     expect(screen.getByRole("button", { name: "Move tool" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -474,7 +503,9 @@ describe("Specialist camera and rotation controls", () => {
     "UX-KEY-008: %s placement uses shared policy wording without a validation-success color",
     (target) => {
       render(<ModelViewport {...viewportProps()} placement={{ ...placement, target }} />);
-      expect(screen.getByText(target === "ground" ? /· Grid$/ : /· Free position$/)).toBeVisible();
+      expect(
+        screen.getByText(target === "ground" ? /· On the floor$/ : /· Free position$/),
+      ).toBeVisible();
       expect(screen.getByLabelText("Placement feedback")).not.toHaveClass("text-success");
       expect(screen.getByLabelText("Placement feedback")).toHaveClass(
         target === "free" ? "text-warning" : "text-muted-foreground",
@@ -661,15 +692,13 @@ describe("Selected brick inspection", () => {
       render(<ModelViewport {...selectedViewportProps()} />);
       openViewTools();
       await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
-      expect(screen.getByTestId("scene-navigation")).toHaveTextContent(
-        coarse ? "touch" : "trackpad",
-      );
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("true");
       expect(screen.getByRole("button", { name: "Navigate camera" })).toHaveAttribute(
         "aria-pressed",
         "true",
       );
       await user.click(screen.getByRole("button", { name: "Exit brick inspection" }));
-      expect(screen.getByTestId("scene-navigation")).toHaveTextContent("mouse");
+      expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
       expect(screen.getByRole("button", { name: "Select tool" })).toHaveAttribute(
         "aria-pressed",
         "true",
@@ -771,8 +800,67 @@ describe("Selected brick inspection", () => {
 });
 
 describe("Authored assembly presentation", () => {
-  it.each(["layers", "modules"] as const)(
-    "reassembles from the floating toggle after switching roof separation to %s",
+  it("opens on the top layer, walks downward, offers an overview, and resets without editing", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    props.model = {
+      ...props.model,
+      instances: [0, 1, 2].map((index) => ({
+        ...props.model.instances[0],
+        id: `brick-${index + 1}`,
+        transform: { x: 0, y: 0.6 + index * 1.2, z: 0, rotation: 0 },
+      })),
+    };
+    const before = structuredClone(props.model);
+    const lock = vi.fn();
+    render(<ModelViewport {...props} onEditingLockChange={lock} />);
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    await user.click(screen.getByRole("button", { name: "Navigate camera" }));
+    await user.click(screen.getByRole("button", { name: "Fit selection" }));
+    await user.click(screen.getByRole("button", { name: "Exploded view" }));
+    expect(screen.getByTestId("scene-primary-orbit")).toHaveTextContent("false");
+    expect(screen.getByTestId("scene-fit-target")).toHaveTextContent("Visible model");
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("layer-3");
+    expect(screen.getByRole("combobox", { name: "Current layer" })).toHaveValue("2");
+    expect(screen.getByRole("button", { name: "Previous layer" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fit selection" })).toBeDisabled();
+    expect(screen.queryByRole("slider", { name: "Assembly separation" })).not.toBeInTheDocument();
+    expect(lock).toHaveBeenLastCalledWith(true);
+    expect(screen.getByRole("button", { name: "Move tool" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Next layer" }));
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("layer-2");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Current layer" }), "0");
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("layer-1");
+    expect(screen.getByRole("button", { name: "Next layer" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fit selection" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Previous layer" }));
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("layer-2");
+    await user.click(screen.getByRole("button", { name: "Show all layers" }));
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("All layers");
+    expect(screen.getByRole("slider", { name: "Assembly separation" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "One layer at a time" }));
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("layer-2");
+    openViewTools();
+    await user.click(screen.getByRole("button", { name: "Select through" }));
+    const chooser = screen.getByRole("combobox", { name: "Choose a model part" });
+    expect(within(chooser).getAllByRole("option")).toHaveLength(2);
+    expect(within(chooser).getByRole("option", { name: /brick-2/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close select through" }));
+    await user.click(screen.getByRole("button", { name: "Show all layers" }));
+    await user.click(screen.getByRole("button", { name: "Reassemble" }));
+    expect(lock).toHaveBeenLastCalledWith(false);
+    expect(screen.getByRole("button", { name: "Move tool" })).toBeEnabled();
+    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("Assembled");
+    await user.click(screen.getByRole("button", { name: "Exploded view" }));
+    expect(screen.getByTestId("scene-layer")).toHaveTextContent("layer-3");
+    expect(props.model).toEqual(before);
+    expect(props.onMove).not.toHaveBeenCalled();
+    expect(props.onSelect).not.toHaveBeenCalled();
+  });
+
+  it.each(["roof", "modules"] as const)(
+    "disassembles all current layers despite authored roof metadata and reassembles after switching to %s",
     async (method) => {
       const user = userEvent.setup();
       const props = selectedViewportProps();
@@ -802,7 +890,12 @@ describe("Authored assembly presentation", () => {
       render(<ModelViewport {...props} />);
       const toggle = screen.getByRole("button", { name: "Exploded view" });
       await user.click(toggle);
-      expect(screen.getByTestId("scene-assembly")).toHaveTextContent("roof 1");
+      expect(screen.getByTestId("scene-assembly")).toHaveTextContent("layers 1");
+      expect(screen.getByRole("combobox", { name: "Disassembly method" })).toHaveValue("layers");
+      expect(screen.getByLabelText("Assembly separation controls")).toHaveTextContent(
+        "Layer 2 of 2",
+      );
+      expect(props.model).toEqual(before);
       await user.selectOptions(
         screen.getByRole("combobox", { name: "Disassembly method" }),
         method,
@@ -851,7 +944,7 @@ describe("Authored assembly presentation", () => {
     render(<ModelViewport {...props} />);
     await user.click(screen.getByRole("button", { name: "Exploded view" }));
     expect(screen.getByRole("combobox", { name: "Disassembly method" })).toHaveValue("layers");
-    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("layers 0.7");
+    expect(screen.getByTestId("scene-assembly")).toHaveTextContent("layers 1");
     await user.click(screen.getByRole("button", { name: "Reassemble" }));
     expect(screen.getByTestId("scene-assembly")).toHaveTextContent("Assembled");
     expect(props.model).toEqual(before);

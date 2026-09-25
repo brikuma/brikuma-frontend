@@ -12,7 +12,9 @@ import {
   EditorStepPreview,
   useEditorReferences,
 } from "../../src/features/editor/components/editor-workflows";
-import { serializeProject } from "../../src/core/model/public";
+import { generateBuildPlan, serializeProject } from "../../src/core/model/public";
+import { serializeProjectPackage, type ProjectPackage } from "../../src/adapters/project-package";
+import { emptyProjectContext } from "../../src/adapters/project-context-file";
 import { editPolicy } from "../../src/fixtures/catalog";
 import { fixture } from "../../src/fixtures/editor/placement-lab";
 
@@ -24,6 +26,10 @@ const OriginalURL = URL;
 beforeEach(() => {
   createObjectURL.mockClear();
   revokeObjectURL.mockClear();
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(async () => ({ width: 100, height: 80, close() {} })),
+  );
   vi.stubGlobal(
     "URL",
     class extends OriginalURL {
@@ -41,6 +47,12 @@ function projectFile(content = serializeProject(fixture.model)) {
   const file = new File([content], "scene.brikuma.json", { type: "application/json" });
   Object.defineProperty(file, "text", { value: () => Promise.resolve(content) });
   return file;
+}
+
+function imageFile(name: string) {
+  return new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])], name, {
+    type: "image/png",
+  });
 }
 
 describe("Editor local workflow HTML contracts", () => {
@@ -109,18 +121,12 @@ describe("Editor local workflow HTML contracts", () => {
   it("EDT-044: handles decode failure and revokes every local image URL", async () => {
     const user = userEvent.setup();
     const view = render(<EditorReferences />, { wrapper: ProjectContextProvider });
-    await user.upload(
-      screen.getByLabelText("Choose local images"),
-      new File(["image"], "wall.png", { type: "image/png" }),
-    );
+    await user.upload(screen.getByLabelText("Choose local images"), imageFile("wall.png"));
     const image = screen.getByRole("img", { name: "Pinned reference: wall.png" });
     fireEvent.error(image);
     expect(screen.getByRole("alert")).toHaveTextContent("could not be decoded");
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:editor-reference");
-    await user.upload(
-      screen.getByLabelText("Choose local images"),
-      new File(["image"], "roof.png", { type: "image/png" }),
-    );
+    await user.upload(screen.getByLabelText("Choose local images"), imageFile("roof.png"));
     view.unmount();
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
   });
@@ -137,10 +143,7 @@ describe("Editor local workflow HTML contracts", () => {
     }
     const user = userEvent.setup();
     const view = render(<Panels />, { wrapper: ProjectContextProvider });
-    await user.upload(
-      screen.getByLabelText("Choose local images"),
-      new File(["image"], "wall.png", { type: "image/png" }),
-    );
+    await user.upload(screen.getByLabelText("Choose local images"), imageFile("wall.png"));
     await user.click(screen.getByRole("button", { name: "Toggle panel" }));
     expect(revokeObjectURL).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Toggle panel" }));
@@ -186,5 +189,64 @@ describe("Editor local workflow HTML contracts", () => {
     await user.upload(screen.getByLabelText("Load project file"), projectFile());
     await user.click(await screen.findByRole("button", { name: "Replace with file" }));
     await waitFor(() => expect(onLoad).toHaveBeenCalledWith(fixture.model));
+  });
+  it("restores a complete project only after confirmation, preserving authored instructions and brief references", async () => {
+    const user = userEvent.setup();
+    const generated = generateBuildPlan(fixture.model, editPolicy.parts);
+    if (!generated.ok) throw new Error(generated.error.message);
+    const context = emptyProjectContext();
+    context.brief.subject = "Keep the local sculpture idea";
+    context.references = [
+      { id: 3, filename: "sketch-notes.pdf", type: "application/pdf", size: 100 },
+    ];
+    const backup: ProjectPackage = {
+      snapshot: {
+        model: fixture.model,
+        instructions: {
+          sourceModel: fixture.model,
+          edited: true,
+          plan: {
+            ...generated.value,
+            steps: generated.value.steps.map((step, index) =>
+              index === 0
+                ? {
+                    ...step,
+                    title: "Prepare the base",
+                    description: "Keep these authored notes.",
+                    view: "top",
+                  }
+                : step,
+            ),
+          },
+        },
+      },
+      context,
+    };
+    const text = await serializeProjectPackage(backup);
+    const onLoad = vi.fn();
+    const onProjectLoad = vi.fn();
+    render(
+      <EditorFiles
+        model={fixture.model}
+        policy={editPolicy}
+        dirty
+        onLoad={onLoad}
+        onProjectLoad={onProjectLoad}
+      />,
+    );
+    await user.upload(screen.getByLabelText("Load project file"), projectFile(text));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "model, brief, references and instructions",
+    );
+    await user.click(screen.getByRole("button", { name: "Keep current model" }));
+    expect(onProjectLoad).not.toHaveBeenCalled();
+    expect(onLoad).not.toHaveBeenCalled();
+
+    await user.upload(screen.getByLabelText("Load project file"), projectFile(text));
+    await user.click(await screen.findByRole("button", { name: "Replace with file" }));
+    expect(onProjectLoad).toHaveBeenCalledExactlyOnceWith(backup);
+    expect(onLoad).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Undo history starts here");
   });
 });

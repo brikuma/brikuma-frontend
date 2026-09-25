@@ -24,6 +24,7 @@ import {
   Download,
 } from "lucide-react";
 import { useProject } from "./state/session";
+import { useWorkspaceSaveStatus } from "./state/workspace-persistence";
 import { PartCatalog, type PartCatalogPreferences } from "./components/part-catalog";
 import { EditorChecks, type ModelChecks } from "./components/editor-checks";
 import { Structure } from "./components/structure";
@@ -47,6 +48,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { partDefinitions, editPolicy } from "@/fixtures/catalog";
 import { downloadLocalBlob } from "@/adapters/local-download";
+import { serializeProjectPackage, type ProjectPackage } from "@/adapters/project-package";
 import {
   getSelectionBounds,
   studsToCentimeters,
@@ -54,16 +56,13 @@ import {
   snapGridTransform,
   getGroupInstanceIds,
   isGroupProtected,
-  hasSupportedDiagnosticGeometry,
-  getPartConnections,
-  serializeProject,
   type EditCommand,
   type GridTransform,
   type Model,
   type QuarterTurn,
 } from "@/core/model/public";
 import type { PlacementPreview, ViewportTool } from "./viewport-types";
-import { snapPlacementCenter } from "./placement-grid";
+import { createInitialPlacement } from "./initial-placement";
 import type { SceneFixture } from "@/fixtures/scene-types";
 import type { EditorFixtureId } from "@/fixtures/editor";
 
@@ -88,6 +87,7 @@ export function Workbench() {
 }
 function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }) {
   const referenceState = useEditorReferences(project.id);
+  const saveStatus = useWorkspaceSaveStatus(project.id);
   const width = useSyncExternalStore(subscribeWidth, readWidth, serverWidth);
   const { model: loadedModel, entry: loadedEntry, message, history, reset } = project;
   const model = loadedModel!;
@@ -119,7 +119,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   const [pending, setPending] = useState<PlacementPreview | null>(null);
   const [repeat, setRepeat] = useState(false);
   const [awaitingNextPosition, setAwaitingNextPosition] = useState(false);
-  const [downloadedModel, setDownloadedModel] = useState<Model | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [catalogColor, setCatalogColor] = useState("limestone");
   const [catalogPreferences, setCatalogPreferences] = useState<PartCatalogPreferences>({
     search: "",
@@ -261,22 +261,25 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     setNotice("");
     setTab("Parts");
     setAwaitingNextPosition(false);
-    setPending({
-      partId,
-      colorId,
-      target:
-        hasSupportedDiagnosticGeometry(definition) &&
-        getPartConnections(definition).receivers.length > 0
-          ? model.instances.length
-            ? "surface"
-            : "ground"
-          : "free",
-      transform: {
-        ...snapPlacementCenter({ x: 0, z: 0 }, definition, 0),
-        y: definition.height / 2,
-        rotation: 0,
-      },
-    });
+    const scopeIds = validScope ? new Set(getGroupInstanceIds(model, validScope)) : null;
+    setPending(
+      createInitialPlacement({
+        model,
+        definitions: partDefinitions,
+        definition,
+        colorId,
+        selectedIds: selectionIds,
+        visibleIds: model.instances
+          .filter(
+            (part) =>
+              (!scopeIds || scopeIds.has(part.id)) &&
+              (!focusIds?.length || focusIds.includes(part.id)) &&
+              (focusIds?.includes(part.id) || !hiddenIds.includes(part.id)),
+          )
+          .map((part) => part.id),
+        bounds: editPolicy.bounds,
+      }),
+    );
   }
   function allocateId() {
     let next = entry.session.nextRevision;
@@ -419,9 +422,24 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   function opened(fixture: SceneFixture, source: "sample" | "file" = "sample") {
     if (source === "file") project.replaceModel(fixture.model);
     else project.replaceFixture(fixture);
+    referenceState.resetPanel();
+    setNotice("");
     setCheckResult(null);
     setSelected([]);
     setHidden(fixture.initiallyHiddenIds ?? []);
+    setScope(null);
+    setSelectedGroup(null);
+    clearPresentation();
+    setPending(null);
+    setFileOpen(false);
+  }
+  function openedProject(value: ProjectPackage) {
+    project.replaceProject(value);
+    referenceState.resetPanel();
+    setNotice("");
+    setCheckResult(null);
+    setSelected([]);
+    setHidden([]);
     setScope(null);
     setSelectedGroup(null);
     clearPresentation();
@@ -549,18 +567,27 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     setSheet(null);
     toggle.current?.focus();
   }
-  function downloadProject() {
+  async function downloadProject() {
+    if (!project.projectPackage) return;
+    setDownloading(true);
     try {
       downloadLocalBlob(
-        new Blob([serializeProject(model)], { type: "application/json" }),
+        new Blob([await serializeProjectPackage(project.projectPackage)], {
+          type: "application/json",
+        }),
         `${model.id}.brikuma.json`,
       );
-      setDownloadedModel(model);
       setNotice(
-        "Download requested. Keep the file to restore the geometry; brief and references remain session-only.",
+        "Project backup requested. Check your files; it includes the model, brief, reference images and instructions.",
       );
-    } catch {
-      setNotice("The browser could not create the download. Your model is unchanged.");
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "The browser could not create the backup. Your work is unchanged.",
+      );
+    } finally {
+      setDownloading(false);
     }
   }
   const left = (
@@ -805,6 +832,9 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               sample={entry.fixture.instructions}
               draft={project.draftInstructions?.plan}
               onGenerate={project.generateInstructions}
+              editedGuideHref={
+                project.hasInstructionEdits ? `/instructions/?project=${project.id}` : undefined
+              }
               onView={changeStepView}
             />
             <details>
@@ -932,17 +962,17 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             {model.instances.length.toLocaleString("en")}{" "}
             {model.instances.length === 1 ? "part" : "parts"}
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground" aria-label="Local save status">
-            {downloadedModel === model
-              ? "Download requested · check your files"
-              : model.revision !== model.baselineRevision
-                ? "Session changes · no autosave"
-                : "Session only · no autosave"}
+          <p
+            className="mt-0.5 text-xs text-muted-foreground"
+            aria-label="Local save status"
+            aria-live="polite"
+          >
+            {saveStatus.status === "error" ? "Not saved · download a backup" : saveStatus.message}
           </p>
         </div>
         <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
-          <Button onClick={downloadProject} className="mr-2 text-xs">
-            <Download size={15} /> Download project
+          <Button onClick={downloadProject} disabled={downloading} className="mr-2 text-xs">
+            <Download size={15} /> {downloading ? "Preparing backup…" : "Download project"}
           </Button>
           <button
             className="icon-button"
@@ -1276,7 +1306,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       <div className="flex min-h-7 shrink-0 flex-wrap items-center justify-between gap-2 border-t bg-surface px-3 py-1 text-xs text-muted-foreground">
         <p className="flex items-center gap-1">
           <Info size={12} />
-          Local editor preview · download to keep edits
+          Browser-local project · download a separate backup
         </p>
         <p role="status" aria-live="polite">
           {notice || message || (pending ? "Preview only · Place commits once" : "Ready to build")}
@@ -1309,7 +1339,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         open={fileOpen}
         onOpenChange={setFileOpen}
         title="Local project files"
-        description="Explicit downloads and loads only. Nothing is uploaded or saved automatically."
+        description="Your work saves locally in this browser. Download a project backup to keep a separate copy or move it to another browser."
       >
         <details className="my-4">
           <summary className="min-h-10 py-2 text-sm">Panel widths</summary>
@@ -1343,22 +1373,33 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         <EditorFiles
           model={model}
           policy={editPolicy}
-          dirty={entry.session.past.length > 0 || project.hasContext}
-          onDownloadRequested={() => setDownloadedModel(model)}
+          dirty={
+            model.instances.length > 0 ||
+            entry.session.past.length > 0 ||
+            project.hasContext ||
+            !!project.draftInstructions
+          }
+          projectPackage={project.projectPackage}
+          onProjectLoad={openedProject}
           onLoad={(value) => opened({ model: value, variant: null, instructions: null }, "file")}
         />
         <div className="mt-6 border-t pt-4">
           <h2 className="text-base">Original studies</h2>
           <p className="mt-2 text-xs text-muted-foreground">
-            Opening a study replaces this model and clears its brief and references. Downloads
-            retain geometry only; copy any brief notes you need before replacing them.
+            Opening a study replaces this model, brief, references and instructions. Download a
+            project backup first to keep your current work.
           </p>
           <SampleChooser
-            dirty={entry.session.past.length > 0 || project.hasContext}
+            dirty={
+              model.instances.length > 0 ||
+              entry.session.past.length > 0 ||
+              project.hasContext ||
+              !!project.draftInstructions
+            }
             onOpen={opened}
           />
           <Link href="/editor/?project=blank" className="button mt-3">
-            Open empty project
+            Open scratch workspace
           </Link>
         </div>
       </Dialog>

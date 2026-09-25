@@ -31,6 +31,11 @@ test("A courtyard can be built in sections, edited and used to generate current 
   const revision = await page.locator(".workbench-shell").getAttribute("data-revision");
   await page.getByRole("button", { name: "Exploded view", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Disassembly method" })).toHaveValue("layers");
+  await expect(page.getByRole("combobox", { name: "Current layer" })).toBeVisible();
+  await expect(page.getByLabel("Assembly separation controls")).toContainText(
+    "Other layers are hidden",
+  );
+  await page.getByRole("button", { name: "Show all layers", exact: true }).click();
   await expect(page.getByLabel("Assembly separation controls")).toContainText("sections");
   await page.getByRole("button", { name: "Reassemble", exact: true }).click();
   await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", revision!);

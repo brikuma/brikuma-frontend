@@ -7,7 +7,7 @@ const referenceImage = {
   name: "shelter-reference.png",
   mimeType: "image/png",
   buffer: Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=",
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNw6Vj1HwAFAAJ2nLRnZQAAAABJRU5ErkJggg==",
     "base64",
   ),
 };
@@ -59,7 +59,7 @@ test("Product continuity: brief, references and declared scale follow the editab
     },
   ]);
   await expect(page.getByRole("img", { name: referenceImage.name, exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Return to workbench", exact: true }).click();
+  await page.getByRole("link", { name: "Open blank workspace", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
   await page.getByRole("button", { name: /More tools · experiments/ }).click();
   await expect(page.getByRole("region", { name: "Assisted design preview" })).toContainText(
@@ -174,12 +174,14 @@ test("Product continuity: the assisted sample is reviewable, reversible and cann
   ).toHaveCount(0);
 
   await navigateProject(page, "Instructions");
+  await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
   await expect(page.getByText(/Instruction sample belongs to the original revision/)).toBeVisible();
   await navigateProject(page, "Workbench");
   await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
   await expect(workbench(page)).toHaveAttribute("data-revision", originalRevision!);
   await navigateProject(page, "Instructions");
+  await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
   await expect(page.getByText(/Instruction sample belongs to the original revision/)).toHaveCount(
     0,
   );
@@ -203,15 +205,18 @@ test("Product continuity: the assisted sample is reviewable, reversible and cann
   await expect(workbench(page)).toHaveAttribute("data-count", String(counts.masseria));
 });
 
-test("Product continuity: project context is isolated during navigation and clears on reload", async ({
+test("Product continuity: project context stays isolated during navigation and restores after reload", async ({
   page,
 }) => {
   await page.goto("/new/?project=blank");
   await page.getByRole("textbox", { name: "Subject or intent" }).fill("My own free-form idea");
   await page.getByLabel("Choose reference files").setInputFiles(referenceImage);
-  await page.getByRole("link", { name: "Return to workbench", exact: true }).click();
+  await page.getByRole("link", { name: "Open blank workspace", exact: true }).click();
   await expect(workbench(page)).toHaveAttribute("data-count", "0");
   const blankRevision = await workbench(page).getAttribute("data-revision");
+  await expect(page.getByLabel("Local save status", { exact: true })).toHaveText(
+    "Saved in this browser",
+  );
 
   await page
     .getByRole("navigation", { name: "Global navigation" })
@@ -229,12 +234,15 @@ test("Product continuity: project context is isolated during navigation and clea
   await page.getByRole("link", { name: "Return to workbench", exact: true }).click();
   await openReferences(page);
   await expect(briefSummary(page)).toContainText("A separate rover brief");
+  await expect(page.getByLabel("Local save status", { exact: true })).toHaveText(
+    "Saved in this browser",
+  );
 
   await page
     .getByRole("navigation", { name: "Global navigation" })
     .getByRole("link", { name: "Workspace", exact: true })
     .click();
-  await page.getByRole("link", { name: "Start from scratch", exact: true }).click();
+  await page.getByRole("link", { name: "Continue your model", exact: true }).click();
   await expect(workbench(page)).toHaveAttribute("data-revision", blankRevision!);
   await expect(workbench(page)).toHaveAttribute("data-count", "0");
   await openReferences(page);
@@ -247,12 +255,24 @@ test("Product continuity: project context is isolated during navigation and clea
   await expect(page.getByRole("textbox", { name: "Subject or intent" })).toHaveValue(
     "My own free-form idea",
   );
+  await expect(page.getByLabel("Local save status", { exact: true })).toHaveText(
+    "Saved in this browser",
+  );
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Subject or intent" })).toHaveValue("");
-  await expect(page.getByRole("img", { name: referenceImage.name, exact: true })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Subject or intent" })).toHaveValue(
+    "My own free-form idea",
+  );
+  await expect(page.getByRole("img", { name: referenceImage.name, exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Return to workbench", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("0");
-  await expect(workbench(page)).toHaveAttribute("data-revision", "blank-r1");
+  await expect(workbench(page)).toHaveAttribute("data-revision", blankRevision!);
+  await expect(page.getByRole("button", { name: "Undo local edit", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Redo local edit", exact: true })).toBeDisabled();
+  await page.goto("/new/?project=rover");
+  await expect(page.getByRole("textbox", { name: "Subject or intent" })).toHaveValue(
+    "A separate rover brief",
+  );
+  await expect(page.getByRole("img", { name: referenceImage.name, exact: true })).toHaveCount(0);
 });
 
 test("Product continuity: metadata-only work survives reset and cancelled replacement, then clears with an explicit import", async ({
@@ -261,7 +281,7 @@ test("Product continuity: metadata-only work survives reset and cancelled replac
   await page.goto("/new/?project=blank");
   await page.getByRole("textbox", { name: "Subject or intent" }).fill("My own free-form idea");
   await page.getByLabel("Choose reference files").setInputFiles(referenceImage);
-  await page.getByRole("link", { name: "Return to workbench", exact: true }).click();
+  await page.getByRole("link", { name: "Open blank workspace", exact: true }).click();
   await expect(workbench(page)).toHaveAttribute("data-count", "0");
   const blankRevision = await workbench(page).getAttribute("data-revision");
   await openReferences(page);
@@ -307,7 +327,10 @@ test("Product continuity: metadata-only work survives reset and cancelled replac
   await openDetails(page, "Project tools");
   await page.getByRole("button", { name: "Local project files", exact: true }).click();
   const files = page.getByRole("dialog", { name: "Local project files", exact: true });
-  await expect(files).toContainText("Downloads preserve geometry and stable part IDs");
+  await expect(files).toContainText(
+    "Backups include your model, brief, reference images and scales, and edited instructions.",
+  );
+  await expect(files).toContainText("Undo history and camera positions are not included.");
   await files.getByLabel("Load project file", { exact: true }).setInputFiles(importedFile);
   const replacement = page.getByRole("dialog", { name: "Replace this local model?" });
   await expect(replacement).toBeVisible();

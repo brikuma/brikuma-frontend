@@ -207,11 +207,11 @@ test("UX-001: canvas R rotates only the placement preview and shortcuts respect 
   await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
   const pending = page.getByRole("region", { name: "Pending brick placement", exact: true });
   const canvas = page.locator("canvas");
-  await expect(pending.getByText("Orientation: 0° around Y", { exact: true })).toBeVisible();
+  await expect(pending.getByText("Turn: 0°", { exact: true })).toBeVisible();
   await canvas.focus();
   await expect(canvas).toBeFocused();
   await page.keyboard.press("r");
-  await expect(pending.getByText("Orientation: 90° around Y", { exact: true })).toBeVisible();
+  await expect(pending.getByText("Turn: 90°", { exact: true })).toBeVisible();
   await expect(shell(page)).toHaveAttribute("data-interaction", "placing");
   await expect(shell(page)).toHaveAttribute("data-revision", before!);
   await expect(shell(page)).toHaveAttribute("data-count", "0");

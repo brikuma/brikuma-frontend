@@ -77,6 +77,16 @@ export function modelBounds(
   if (box.isEmpty()) box.set(new Vector3(-6, 0, -6), new Vector3(6, 1, 6));
   return box;
 }
+
+function updateCameraClipping(camera: Camera, bounds: Box3) {
+  if (!(camera instanceof OrthographicCamera || camera instanceof PerspectiveCamera)) return;
+  const radius = bounds.getSize(new Vector3()).length() / 2;
+  const distance = camera.position.distanceTo(bounds.getCenter(new Vector3()));
+  camera.near = Math.max(0.01, (distance - radius) / 1000);
+  camera.far = Math.max(500, distance + radius * 4);
+  camera.updateProjectionMatrix();
+}
+
 export function CameraRig({
   bounds,
   sceneId,
@@ -139,6 +149,7 @@ export function CameraRig({
           saved.target,
           size.width,
           size.height,
+          bounds,
         );
         control.target.copy(saved.target);
         pendingTarget.current = saved.target.clone();
@@ -148,7 +159,19 @@ export function CameraRig({
       previousMode.current = mode;
       invalidate();
     }
-  }, [camera, controls, frozen, get, invalidate, mode, projection, set, size.height, size.width]);
+  }, [
+    bounds,
+    camera,
+    controls,
+    frozen,
+    get,
+    invalidate,
+    mode,
+    projection,
+    set,
+    size.height,
+    size.width,
+  ]);
   useLayoutEffect(() => {
     if (frozen) return;
     if (restoringMode.current) {
@@ -157,7 +180,7 @@ export function CameraRig({
     }
     if ((projection === "orthographic") === camera instanceof OrthographicCamera) return;
     const target = controls.current?.target.clone() ?? bounds.getCenter(new Vector3());
-    const next = convertedProjection(camera, projection, target, size.width, size.height);
+    const next = convertedProjection(camera, projection, target, size.width, size.height, bounds);
     pendingTarget.current = target;
     set({ camera: next });
     invalidate();
@@ -247,10 +270,8 @@ export function CameraRig({
       const height = size.height / fittedZoom;
       const distance = height / (2 * Math.tan((camera.fov * Math.PI) / 360));
       camera.position.copy(center).addScaledVector(direction, distance);
-      camera.near = Math.max(0.01, distance / 1000);
-      camera.far = Math.max(500, distance + diagonal * 4);
     }
-    camera.updateProjectionMatrix();
+    updateCameraClipping(camera, bounds);
     lastZoom.current = zoom;
     if (controls.current) {
       controls.current.target.copy(center);
@@ -294,10 +315,18 @@ export function CameraRig({
         .multiplyScalar(lastZoom.current / zoom)
         .add(target);
     }
-    camera.updateProjectionMatrix();
+    updateCameraClipping(camera, bounds);
     lastZoom.current = zoom;
     invalidate();
-  }, [controls, frozen, get, invalidate, zoom]);
+  }, [bounds, controls, frozen, get, invalidate, zoom]);
+  useLayoutEffect(() => {
+    const control = controls.current;
+    if (frozen || !control || registeredControls !== control) return;
+    const update = () => updateCameraClipping(get().camera, bounds);
+    update();
+    control.addEventListener("change", update);
+    return () => control.removeEventListener("change", update);
+  }, [bounds, controls, frozen, get, registeredControls]);
   useLayoutEffect(() => {
     if (
       frozen ||
@@ -348,6 +377,7 @@ export function convertedProjection(
   target: Vector3,
   width: number,
   height: number,
+  bounds?: Box3,
 ) {
   const safeWidth = Math.max(1, width),
     safeHeight = Math.max(1, height);
@@ -382,5 +412,6 @@ export function convertedProjection(
         .multiplyScalar(visibleHeight / (2 * Math.tan((next.fov * Math.PI) / 360))),
     );
   next.updateProjectionMatrix();
+  if (bounds) updateCameraClipping(next, bounds);
   return next;
 }

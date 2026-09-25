@@ -27,6 +27,15 @@ export {
 export type { StudSite, StudContact } from "./domain/connections";
 export { generateBuildPlan, getBuildLayers, isBuildPlanCurrent } from "./domain/build-plan";
 export type { BuildLayer, DraftBuildPlan, DraftBuildStep } from "./domain/build-plan";
+export { applyBuildPlanEdit } from "./domain/build-plan-editing";
+export {
+  createBuildPlanSession,
+  editBuildPlan,
+  undoBuildPlan,
+  redoBuildPlan,
+} from "./application/build-plan-commands";
+export type { BuildPlanEdit } from "./domain/build-plan-editing";
+export type { BuildPlanSession } from "./application/build-plan-commands";
 export {
   getReceivingSlopeProfile,
   framedDoorMaterial,
@@ -65,6 +74,16 @@ export {
   PROJECT_SCHEMA_VERSION,
   PROJECT_TEXT_LIMIT,
 } from "./application/project-file";
+export {
+  encodeProjectSnapshot,
+  parseProjectSnapshot,
+  INSTRUCTION_MEMBERSHIP_LIMIT,
+} from "./application/project-snapshot";
+export type {
+  ProjectSnapshot,
+  SerializedProjectSnapshot,
+  SerializedBuildStep,
+} from "./application/project-snapshot";
 export type {
   BomLine,
   DomainError,

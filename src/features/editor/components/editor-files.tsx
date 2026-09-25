@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { type EditingPolicy, type Model } from "@/core/model/public";
 import {
-  parseProject,
-  serializeProject,
-  type EditingPolicy,
-  type Model,
-} from "@/core/model/public";
+  parseProjectPackage,
+  serializeProjectPackage,
+  PROJECT_PACKAGE_BYTES,
+  type ProjectPackage,
+} from "@/adapters/project-package";
+import { emptyProjectContext } from "@/adapters/project-context-file";
 import { downloadLocalBlob } from "@/adapters/local-download";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -17,17 +19,22 @@ export function EditorFiles({
   dirty,
   onLoad,
   onDownloadRequested,
+  projectPackage,
+  onProjectLoad,
 }: {
   model: Model;
   policy: EditingPolicy;
   dirty: boolean;
   onLoad: (model: Model) => void;
   onDownloadRequested?: () => void;
+  projectPackage?: ProjectPackage;
+  onProjectLoad?: (project: ProjectPackage) => void;
 }) {
-  const [pending, setPending] = useState<Model | null>(null);
+  const [pending, setPending] = useState<ProjectPackage | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [reading, setReading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const latest = useRef({ model, dirty });
   const readSequence = useRef(0);
   useEffect(() => {
@@ -39,38 +46,54 @@ export function EditorFiles({
     },
     [],
   );
-  function load(next: Model) {
-    onLoad(next);
+  function load(next: ProjectPackage) {
+    if (onProjectLoad) onProjectLoad(next);
+    else onLoad(next.snapshot.model);
     setPending(null);
-    setMessage(`Loaded ${next.title} locally: ${next.instances.length} parts.`);
+    setMessage(
+      `Loaded ${next.snapshot.model.title} locally: ${next.snapshot.model.instances.length} parts. Undo history starts here.`,
+    );
   }
   return (
     <section aria-label="Local project files" className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Downloads preserve geometry and stable part IDs. Brief notes, reference files and manual
-        reference scales are session-only and are not included. Loading another model clears them.
-        No cloud save or automatic persistence.
+        Backups include your model, brief, reference images and scales, and edited instructions.
+        PDFs keep their names and metadata only. Undo history and camera positions are not included.
+        Keep a backup outside this browser; clearing browser data also removes local saves.
       </p>
       <Button
-        onClick={() => {
+        disabled={downloading}
+        onClick={async () => {
+          setDownloading(true);
           try {
             downloadLocalBlob(
-              new Blob([serializeProject(model)], { type: "application/json" }),
+              new Blob(
+                [
+                  await serializeProjectPackage(
+                    projectPackage ?? { snapshot: { model }, context: emptyProjectContext() },
+                  ),
+                ],
+                { type: "application/json" },
+              ),
               `${model.id}.brikuma.json`,
             );
             onDownloadRequested?.();
             setMessage(
-              `Download requested for ${model.revision}. Keep the file to restore this model.`,
+              `Backup download requested for ${model.revision}. Check your files before replacing work.`,
             );
             setError("");
-          } catch {
+          } catch (error) {
             setError(
-              "The browser could not create a local project download. Your model is unchanged.",
+              error instanceof Error
+                ? error.message
+                : "The browser could not create a project backup. Your work is unchanged.",
             );
+          } finally {
+            setDownloading(false);
           }
         }}
       >
-        Download project file
+        {downloading ? "Preparing backup…" : "Download project file"}
       </Button>
       <label className="block text-sm">
         Load project file
@@ -83,8 +106,8 @@ export function EditorFiles({
             const file = event.target.files?.[0];
             event.target.value = "";
             if (!file) return;
-            if (!file.size || file.size > 4 * 1024 * 1024) {
-              setError("Choose a nonempty project file no larger than 4 MB.");
+            if (!file.size || file.size > PROJECT_PACKAGE_BYTES) {
+              setError("Choose a nonempty project file no larger than 96 MiB.");
               return;
             }
             setReading(true);
@@ -92,10 +115,10 @@ export function EditorFiles({
             setError("");
             setMessage("");
             try {
-              const result = parseProject(await file.text(), policy);
+              const result = await parseProjectPackage(await file.text(), policy);
               if (sequence !== readSequence.current) return;
               if (!result.ok) {
-                setError(result.error.message);
+                setError(result.error);
                 return;
               }
               if (latest.current.dirty || latest.current.model !== model) setPending(result.value);
@@ -130,10 +153,10 @@ export function EditorFiles({
           if (!open) setPending(null);
         }}
         title="Replace this local model?"
-        description="The selected file has been validated. Loading it replaces your current model, undo history, brief and references. Download the geometry and copy any brief notes you need before replacing them. Reference files and scales are not included in downloads."
+        description="This file has been validated. Loading it replaces the current model, brief, references and instructions, and starts a new undo history. Download a project backup first to keep your current work. Legacy scene files contain only geometry."
       >
         <p className="mb-4 text-sm">
-          {pending?.title} · {pending?.instances.length} parts
+          {pending?.snapshot.model.title} · {pending?.snapshot.model.instances.length} parts
         </p>
         <div className="flex flex-wrap gap-2">
           <Button

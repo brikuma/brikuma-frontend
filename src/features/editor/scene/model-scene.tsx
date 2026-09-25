@@ -48,6 +48,7 @@ export interface SceneProps extends ModelViewportProps {
   exploded: boolean;
   assemblyMode: AssemblyViewMode;
   assemblyAmount: number;
+  assemblyFocusId?: string;
   zoom: number;
   quality: RenderQuality;
   view: CameraView;
@@ -61,7 +62,7 @@ export interface SceneProps extends ModelViewportProps {
   projection?: CameraProjection;
   cameraAction?: CameraAction;
   fitSelection?: boolean;
-  navigation?: "mouse" | "trackpad" | "touch";
+  primaryOrbit?: boolean;
   exportRequest?: ImageExportRequest | null;
   onExport?: (blob: Blob | null, message: string) => void;
   selectThrough?: boolean;
@@ -135,19 +136,6 @@ function SceneContents(props: SceneProps) {
       missedHandlerRef.current = null;
     };
   }, [missedHandlerRef, onClearSelection, tool, transientView]);
-  const presentedModel = useMemo(
-    () => ({
-      ...model,
-      instances: model.instances.filter((part) =>
-        partIsPresented(part, {
-          hidden,
-          focusIds: props.focusIds,
-          presentationIds: props.presentationIds,
-        }),
-      ),
-    }),
-    [hidden, model, props.focusIds, props.presentationIds],
-  );
   const assembly = useMemo(
     () =>
       createAssemblyView(
@@ -159,7 +147,39 @@ function SceneContents(props: SceneProps) {
       ),
     [model, props.assemblyView, props.assemblyMode, props.assemblyAmount, exploded],
   );
-  const offsets = assembly.offsets;
+  const layerView = exploded && props.assemblyMode === "layers";
+  const focusedLayer = layerView
+    ? assembly.modules.find((module) => module.id === props.assemblyFocusId)
+    : undefined;
+  const section = layerView ? null : props.section;
+  const presentedModel = useMemo(
+    () => ({
+      ...model,
+      instances: model.instances.filter((part) =>
+        layerView
+          ? !focusedLayer || focusedLayer.partIds.includes(part.id)
+          : partIsPresented(part, {
+              hidden,
+              focusIds: props.focusIds,
+              presentationIds: props.presentationIds,
+            }),
+      ),
+    }),
+    [focusedLayer, layerView, hidden, model, props.focusIds, props.presentationIds],
+  );
+  const focusedOffsets = useMemo(
+    () =>
+      focusedLayer
+        ? new Map(
+            focusedLayer.partIds.map((id) => [
+              id,
+              { x: 0, y: -focusedLayer.bounds.min.y || 0, z: 0 },
+            ]),
+          )
+        : null,
+    [focusedLayer],
+  );
+  const offsets = focusedOffsets ?? assembly.offsets;
   const fullAssembly = useMemo(
     () =>
       createAssemblyView(
@@ -171,22 +191,16 @@ function SceneContents(props: SceneProps) {
       ),
     [model, props.assemblyView, props.assemblyMode, exploded],
   );
-  const bounds = useMemo(
-    () =>
-      modelBounds(
-        props.fitSelection && (props.selectedIds?.length || selected)
-          ? {
-              ...presentedModel,
-              instances: presentedModel.instances.filter((part) =>
-                (props.selectedIds ?? [selected]).includes(part.id),
-              ),
-            }
-          : presentedModel,
-        [],
-        fullAssembly.offsets,
-      ),
-    [presentedModel, fullAssembly, props.fitSelection, props.selectedIds, selected],
-  );
+  const fitOffsets = focusedOffsets ?? fullAssembly.offsets;
+  const fitModel = useMemo(() => {
+    const selectedParts = props.fitSelection
+      ? presentedModel.instances.filter((part) =>
+          (props.selectedIds ?? [selected]).includes(part.id),
+        )
+      : [];
+    return selectedParts.length ? { ...presentedModel, instances: selectedParts } : presentedModel;
+  }, [presentedModel, props.fitSelection, props.selectedIds, selected]);
+  const bounds = useMemo(() => modelBounds(fitModel, [], fitOffsets), [fitModel, fitOffsets]);
   const center = bounds.getCenter(new Vector3());
   const span = bounds.getSize(new Vector3());
   const shadowSize = Math.max(inspection ? 3 : 16, span.x, span.z) * 0.8 + span.y * 0.35;
@@ -240,7 +254,7 @@ function SceneContents(props: SceneProps) {
       spacePan.current = false;
       if (controls.current)
         controls.current.mouseButtons.LEFT =
-          props.navigation === "trackpad" ? MOUSE.ROTATE : undefined;
+          props.primaryOrbit && tool === "select" ? MOUSE.ROTATE : undefined;
     };
     const visibility = () => {
       if (document.hidden) {
@@ -269,7 +283,7 @@ function SceneContents(props: SceneProps) {
         spacePan.current = false;
         if (controls.current)
           controls.current.mouseButtons.LEFT =
-            props.navigation === "trackpad" ? MOUSE.ROTATE : undefined;
+            props.primaryOrbit && tool === "select" ? MOUSE.ROTATE : undefined;
       }
     };
     const protectBrowserZoom = (event: WheelEvent) => {
@@ -299,7 +313,7 @@ function SceneContents(props: SceneProps) {
     canvas.setAttribute("tabindex", "0");
     canvas.setAttribute(
       "aria-label",
-      "3D model. Right drag or navigation buttons orbit; middle drag pans. Space and primary drag pan.",
+      "3D model. Choose Orbit to drag or swipe around the model. Right drag also orbits; middle drag or Space and primary drag pan. Two fingers zoom and pan.",
     );
     return () => {
       canvas.removeEventListener("pointercancel", pointerCancel);
@@ -312,12 +326,12 @@ function SceneContents(props: SceneProps) {
       canvas.removeEventListener("keydown", keydown);
       window.removeEventListener("keyup", keyup);
       for (const frame of pendingFrames) cancelAnimationFrame(frame);
-      const current = dragSession.current;
-      dragSession.current = null;
-      if (current && canvas.hasPointerCapture(current.pointerId))
-        canvas.releasePointerCapture(current.pointerId);
+      // A tool change also reruns this effect; discard the visible preview and
+      // release the camera alongside pointer capture before the next tool starts.
+      cancel();
+      spacePan.current = false;
     };
-  }, [gl, invalidate, props.navigation]);
+  }, [gl, invalidate, props.primaryOrbit, tool]);
   useEffect(() => {
     gl.domElement.style.setProperty(
       "cursor",
@@ -484,7 +498,7 @@ function SceneContents(props: SceneProps) {
       event.delta > 4 ||
       spacePan.current ||
       suppressClick.current ||
-      !pointIsVisible(event.point, props.section)
+      !pointIsVisible(event.point, section)
     ) {
       suppressClick.current = false;
       return;
@@ -492,7 +506,7 @@ function SceneContents(props: SceneProps) {
     if (props.selectThrough) {
       const ids: string[] = [];
       for (const hit of event.intersections) {
-        if (!pointIsVisible(hit.point, props.section) || hit.instanceId === undefined) continue;
+        if (!pointIsVisible(hit.point, section) || hit.instanceId === undefined) continue;
         const mapping = hit.object.userData.partIds;
         const id: unknown = Array.isArray(mapping)
           ? instancePartId(mapping, hit.instanceId, hit.object.userData.instancesPerPart ?? 1)
@@ -520,7 +534,7 @@ function SceneContents(props: SceneProps) {
     <>
       <CameraRig
         bounds={bounds}
-        sceneId={`${model.id}-${props.inspectionPartId ?? "assembly"}-${props.assemblyMode}-${exploded}-${inspection ? model.revision : ""}`}
+        sceneId={`${model.id}-${props.inspectionPartId ?? "assembly"}-${props.assemblyMode}-${props.assemblyFocusId ?? "all"}-${exploded}-${inspection ? model.revision : ""}`}
         inspection={inspection}
         view={props.view}
         fitRequest={props.fitRequest}
@@ -532,18 +546,9 @@ function SceneContents(props: SceneProps) {
         mode={props.mode}
         cameraAction={props.cameraAction}
         frozen={Boolean(props.exportRequest)}
-        model={
-          props.fitSelection && (props.selectedIds?.length || selected)
-            ? {
-                ...presentedModel,
-                instances: presentedModel.instances.filter((part) =>
-                  (props.selectedIds ?? [selected]).includes(part.id),
-                ),
-              }
-            : presentedModel
-        }
+        model={fitModel}
         hidden={[]}
-        offsets={fullAssembly.offsets}
+        offsets={fitOffsets}
       />
       {props.presentationPreset !== "transparent" && (
         <color
@@ -629,7 +634,7 @@ function SceneContents(props: SceneProps) {
       )}
       {quality === "studio" && !inspection && (
         <StudioContactShadow
-          revision={`${model.revision}-${hidden.join("-")}-${exploded}-${props.assemblyMode}-${props.assemblyAmount}`}
+          revision={`${model.revision}-${hidden.join("-")}-${exploded}-${props.assemblyMode}-${props.assemblyAmount}-${props.assemblyFocusId ?? "all"}`}
           enabled={!drag && !placement}
           position={[center.x, -0.025, center.z]}
           scale={Math.max(24, span.x + 10, span.z + 10)}
@@ -682,15 +687,21 @@ function SceneContents(props: SceneProps) {
               onPick={pick}
               onOver={hover}
               onOut={() => hover(null)}
-              section={props.section}
+              section={section}
               muted={muted}
             />
           ) : null;
         }),
       )}
       {exploded &&
+        !focusedLayer &&
         props.assemblyAmount > 0 &&
         assembly.modules
+          .filter(
+            (module) =>
+              props.assemblyMode !== "layers" ||
+              module.partIds.some((id) => (props.selectedIds ?? [selected]).includes(id)),
+          )
           .filter((module) =>
             module.partIds.some((id) => presentedModel.instances.some((part) => part.id === id)),
           )
@@ -753,12 +764,12 @@ function SceneContents(props: SceneProps) {
         enabled={!drag && !props.exportRequest}
         enableRotate
         mouseButtons={{
-          LEFT: props.navigation === "trackpad" && tool === "select" ? MOUSE.ROTATE : undefined,
+          LEFT: props.primaryOrbit && tool === "select" ? MOUSE.ROTATE : undefined,
           MIDDLE: MOUSE.PAN,
           RIGHT: MOUSE.ROTATE,
         }}
         touches={{
-          ONE: props.navigation === "touch" ? TOUCH.ROTATE : undefined,
+          ONE: props.primaryOrbit && tool === "select" ? TOUCH.ROTATE : undefined,
           TWO: TOUCH.DOLLY_PAN,
         }}
         enableDamping={!reducedMotion}

@@ -18,8 +18,13 @@ import {
 const createObjectURL = vi.fn();
 const revokeObjectURL = vi.fn();
 const OriginalURL = URL;
+const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
 
 beforeEach(() => {
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn().mockResolvedValue({ width: 200, height: 100, close: vi.fn() }),
+  );
   let counter = 0;
   createObjectURL.mockReset().mockImplementation(() => `blob:reference-${counter++}`);
   revokeObjectURL.mockReset();
@@ -117,7 +122,7 @@ describe("Project context continuity", () => {
     const user = userEvent.setup();
     const view = render(<Routes />, { wrapper: ProjectContextProvider });
     await user.upload(screen.getByLabelText("Choose reference files"), [
-      new File(["image"], "courtyard.png", { type: "image/png" }),
+      new File([pngBytes], "courtyard.png", { type: "image/png" }),
       new File(["pdf"], "notes.pdf", { type: "application/pdf" }),
     ]);
     expect(createObjectURL).toHaveBeenCalledOnce();
@@ -162,7 +167,7 @@ describe("Project context continuity", () => {
     expect(screen.queryByText("notes.pdf")).not.toBeInTheDocument();
     await user.upload(
       screen.getByLabelText("Choose local images"),
-      new File(["image"], "rover.png", { type: "image/png" }),
+      new File([pngBytes], "rover.png", { type: "image/png" }),
     );
     await user.click(screen.getByRole("button", { name: "Blank project" }));
     await user.click(screen.getByRole("button", { name: "Brief route" }));
@@ -182,8 +187,8 @@ describe("Project context continuity", () => {
     const user = userEvent.setup();
     render(<ReferenceEditor projectId="blank" />, { wrapper: ProjectContextProvider });
     await user.upload(screen.getByLabelText("Choose local images"), [
-      new File(["image"], "wall.png", { type: "image/png" }),
-      new File(["image"], "roof.png", { type: "image/png" }),
+      new File([pngBytes], "wall.png", { type: "image/png" }),
+      new File([pngBytes], "roof.png", { type: "image/png" }),
     ]);
     await user.click(screen.getByText("Manual reference scale"));
     await user.clear(screen.getByLabelText("Known length (studs)"));
@@ -208,7 +213,7 @@ describe("Project context continuity", () => {
           onClick={() => {
             const files = Array.from(
               { length: 4 },
-              (_, index) => new File(["image"], `image-${index}.png`, { type: "image/png" }),
+              (_, index) => new File([pngBytes], `image-${index}.png`, { type: "image/png" }),
             );
             context.addReferences(files);
             context.addReferences(files);
@@ -233,7 +238,7 @@ describe("Project context continuity", () => {
     await user.click(screen.getByRole("button", { name: "Rover project" }));
     await user.upload(
       screen.getByLabelText("Choose reference files"),
-      new File(["image"], "rover.png", { type: "image/png" }),
+      new File([pngBytes], "rover.png", { type: "image/png" }),
     );
     await user.click(screen.getByRole("button", { name: "Blank project" }));
     await user.click(screen.getByRole("button", { name: "Clear project context" }));

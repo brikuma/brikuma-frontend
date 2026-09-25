@@ -11,6 +11,7 @@ export function ReferencePicker({ projectId = "blank" }: { projectId?: ProjectId
     setReferences,
     addReferences,
     removeReference: remove,
+    referenceError,
   } = useProjectContext(projectId);
   const [error, setError] = useState("");
   return (
@@ -35,11 +36,12 @@ export function ReferencePicker({ projectId = "blank" }: { projectId?: ProjectId
         />
       </label>
       <p className="mt-2 text-xs text-muted-foreground">
-        {copy.references} References follow this project during navigation and clear on reload.
+        {copy.references} Project backups include images and declared scales; PDFs retain filenames
+        only. Check the local save status before leaving.
       </p>
-      {error && (
+      {(error || referenceError) && (
         <p role="alert" className="mt-2 text-sm text-danger">
-          {error}
+          {error || referenceError}
         </p>
       )}
       <ul className="mt-3 space-y-2">
@@ -67,9 +69,17 @@ export function ReferencePicker({ projectId = "blank" }: { projectId?: ProjectId
                         return;
                       }
                       setReferences((current) =>
-                        current.map((reference) =>
-                          reference.id === item.id ? { ...reference, width, height } : reference,
-                        ),
+                        current.some(
+                          (reference) =>
+                            reference.id === item.id &&
+                            (reference.width !== width || reference.height !== height),
+                        )
+                          ? current.map((reference) =>
+                              reference.id === item.id
+                                ? { ...reference, width, height }
+                                : reference,
+                            )
+                          : current,
                       );
                     }}
                     onError={() => {
@@ -85,7 +95,11 @@ export function ReferencePicker({ projectId = "blank" }: { projectId?: ProjectId
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm">{item.filename}</p>
               <p className="text-xs text-muted-foreground">
-                {item.url ? "Local image" : "PDF · filename only, not parsed"}
+                {item.type.startsWith("image/")
+                  ? item.url
+                    ? "Local image"
+                    : "Image preview unavailable · bytes retained"
+                  : "PDF · filename only, not parsed"}
               </p>
             </div>
             <button

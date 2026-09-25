@@ -46,3 +46,12 @@ The application [icon.svg](../../src/app/icon.svg) is an original geometric cube
 ## Latest general-purpose UX clarification
 
 The owner supplied the shared product conversation (private reference URL withheld) and reaffirmed general-purpose brick modeling with optional assistance. The rendered v0.0.2/v0.0.3 discussion and its free-form scope were read; linked document attachments are not claimed newly downloaded or fully inspected. The Mediterranean reference image (private reference URL withheld) was inspected at full resolution for layout, floating controls and model material direction. Its project, price and validation labels remain illustrative. No reference bitmap is shipped in the application. [FE-DEC-015](../DECISIONS.md#fe-dec-015-general-purpose-workspace-and-local-instruction-drafts) records the applied scope and design decision.
+
+## September 25 product and competitor conversations
+
+Both complete rendered conversations below were inspected through Chrome on 2026-09-25 during the owner-authorized frontend continuation. Attached documents were not inspected in this pass. The chats are supplied product input; statements about competitors, their current capabilities, prices or underlying sources were not independently reverified.
+
+- Product idea and structured project discussion (private reference URL withheld): keep free-form design first-class, retain a canonical structured editable project rather than treating chat text as model truth, connect model/parts/instructions, and separate visual style, construction system, use and constraints. Future assistance should respect versions, protected work and reviewable previews. The current pass applies the manual placement and current-model output implications only.
+- Competitor and design-tool discussion (private reference URL withheld): treat digital fit and physical buildability as separate questions; make part discovery useful; keep diagnostics distinct; develop instructions around subassemblies and preserve editorial changes. These are product directions and backlog inputs, not verified claims that BRIKUMA or any competitor already implements them.
+
+[FE-DEC-017](../DECISIONS.md#fe-dec-017-simple-manual-building-and-current-model-instructions) and the [UX backlog](../product/UX_REVIEW.md#follow-up-backlog) record applied and deferred work. No chat export, attachment, account data or verbatim conversation content is shipped in the product. Frontend-only scope and the current user's instructions remain authoritative.

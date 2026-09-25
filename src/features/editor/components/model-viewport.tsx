@@ -91,7 +91,9 @@ export function ModelViewport(props: ModelViewportProps) {
   const [ready, setReady] = useState(false);
   const [exploded, setExploded] = useState(false);
   const [assemblyMode, setAssemblyMode] = useState<AssemblyViewMode>("layers");
-  const [assemblyAmount, setAssemblyAmount] = useState(0.7);
+  const [assemblyAmount, setAssemblyAmount] = useState(1);
+  const [allLayers, setAllLayers] = useState(false);
+  const [assemblyLayerIndex, setAssemblyLayerIndex] = useState<number | null>(null);
   const assembly = useMemo(
     () =>
       createAssemblyView(model, partDefinitions, props.assemblyView, assemblyMode, assemblyAmount),
@@ -101,6 +103,12 @@ export function ModelViewport(props: ModelViewportProps) {
     () => createAssemblyView(model, partDefinitions, props.assemblyView, "roof", 1).available,
     [model, props.assemblyView],
   );
+  const layerIndex = Math.max(
+    0,
+    Math.min(assemblyLayerIndex ?? assembly.modules.length - 1, assembly.modules.length - 1),
+  );
+  const focusedLayer =
+    exploded && assemblyMode === "layers" && !allLayers ? assembly.modules[layerIndex] : undefined;
   const [zoom, setZoom] = useState(1);
   const [reset, setReset] = useState(0);
   const [quality, setQuality] = useState<RenderQuality>("standard");
@@ -115,13 +123,8 @@ export function ModelViewport(props: ModelViewportProps) {
     setProjection(modeProjections[nextMode] ?? projection);
     setProjectionMode(nextMode);
   }
-  const [navigation, setNavigation] = useState<"mouse" | "trackpad" | "touch">("mouse");
   const [primaryOrbit, setPrimaryOrbit] = useState(false);
-  const effectiveNavigation =
-    primaryOrbit && !placement ? (navigation === "mouse" ? "trackpad" : navigation) : "mouse";
   function enablePrimaryOrbit() {
-    if (navigation === "mouse")
-      setNavigation(window.matchMedia("(pointer: coarse)").matches ? "touch" : "trackpad");
     setPrimaryOrbit(true);
   }
   const [cameraAction, setCameraAction] = useState<CameraAction>();
@@ -194,9 +197,12 @@ export function ModelViewport(props: ModelViewportProps) {
   }
   const [hovered, setHovered] = useState<string | null>(null);
   const selectedPart = model.instances.find((part) => part.id === selected);
-  const selectThroughParts = pickCandidates.length
-    ? pickCandidates.flatMap((id) => model.instances.find((part) => part.id === id) ?? [])
+  const selectableParts = focusedLayer
+    ? model.instances.filter((part) => focusedLayer.partIds.includes(part.id))
     : model.instances;
+  const selectThroughParts = pickCandidates.length
+    ? pickCandidates.flatMap((id) => selectableParts.find((part) => part.id === id) ?? [])
+    : selectableParts;
   const inspectionPartId = inspection && selectedPart && !placement ? selectedPart.id : null;
   const editing = Boolean(placement) || tool === "move";
   const workingAxis = props.workplane?.axis ?? "y";
@@ -288,14 +294,28 @@ export function ModelViewport(props: ModelViewportProps) {
     onCancelPlacement?.();
     exitInspection();
     setTool("select");
+    setPrimaryOrbit(false);
+    setFitSelection(false);
     setAssemblyMode(mode);
-    setAssemblyAmount(mode === "roof" ? 1 : 0.7);
+    setAssemblyAmount(1);
+    setAllLayers(false);
+    setAssemblyLayerIndex(null);
+    setPickCandidates([]);
     setExploded((open) => (mode === assemblyMode ? !open : true));
     setFitRequest((n) => n + 1);
     setZoom(1);
   }
   function closeAssembly() {
     setExploded(false);
+    setFitSelection(false);
+    setFitRequest((n) => n + 1);
+    setZoom(1);
+  }
+  function focusLayer(index: number) {
+    setAssemblyLayerIndex(index);
+    setAllLayers(false);
+    setFitSelection(false);
+    setPickCandidates([]);
     setFitRequest((n) => n + 1);
     setZoom(1);
   }
@@ -484,7 +504,12 @@ export function ModelViewport(props: ModelViewportProps) {
                 value={assemblyMode}
                 onChange={(event) => {
                   setAssemblyMode(event.target.value as AssemblyViewMode);
+                  setFitSelection(false);
+                  setAllLayers(false);
+                  setAssemblyLayerIndex(null);
+                  setPickCandidates([]);
                   setFitRequest((n) => n + 1);
+                  setZoom(1);
                 }}
               >
                 {roofAvailable && <option value="roof">Lift the roof</option>}
@@ -492,44 +517,108 @@ export function ModelViewport(props: ModelViewportProps) {
                 {props.assemblyView && <option value="modules">Separate assemblies</option>}
               </select>
             </span>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Separation
-              <input
-                type="range"
-                aria-label="Assembly separation"
-                min="0"
-                max="100"
-                step="1"
-                disabled={!assembly.available}
-                value={Math.round(assemblyAmount * 100)}
-                onChange={(event) => setAssemblyAmount(Number(event.target.value) / 100)}
-                className="w-24 accent-primary"
-              />
-              <span className="w-8 tabular-nums">{Math.round(assemblyAmount * 100)}%</span>
-              <input
-                type="number"
-                aria-label="Assembly separation percent"
-                min="0"
-                max="100"
-                disabled={!assembly.available}
-                value={Math.round(assemblyAmount * 100)}
-                className="min-h-9 w-16 rounded border bg-surface px-2"
-                onChange={(event) => {
-                  const value = Number(event.target.value);
-                  if (Number.isFinite(value))
-                    setAssemblyAmount(Math.max(0, Math.min(100, value)) / 100);
+            {assemblyMode === "layers" && assembly.available && (
+              <button
+                className="button min-h-9 px-2 text-xs"
+                aria-pressed={allLayers}
+                onClick={() => {
+                  setAllLayers((value) => !value);
+                  setFitSelection(false);
+                  setPickCandidates([]);
+                  setFitRequest((n) => n + 1);
+                  setZoom(1);
                 }}
-              />
-            </label>
+              >
+                {allLayers ? "One layer at a time" : "Show all layers"}
+              </button>
+            )}
+            {!focusedLayer && (
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                Separation
+                <input
+                  type="range"
+                  aria-label="Assembly separation"
+                  min="0"
+                  max="100"
+                  step="1"
+                  disabled={!assembly.available}
+                  value={Math.round(assemblyAmount * 100)}
+                  onChange={(event) => setAssemblyAmount(Number(event.target.value) / 100)}
+                  className="w-24 accent-primary"
+                />
+                <span className="w-8 tabular-nums">{Math.round(assemblyAmount * 100)}%</span>
+                <input
+                  type="number"
+                  aria-label="Assembly separation percent"
+                  min="0"
+                  max="100"
+                  disabled={!assembly.available}
+                  value={Math.round(assemblyAmount * 100)}
+                  className="min-h-9 w-16 rounded border bg-surface px-2"
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    if (Number.isFinite(value))
+                      setAssemblyAmount(Math.max(0, Math.min(100, value)) / 100);
+                  }}
+                />
+              </label>
+            )}
             <button className="text-xs font-medium text-primary" onClick={closeAssembly}>
               Reassemble
             </button>
           </div>
-          <p className="mt-1 text-center text-xs text-muted-foreground">
-            {assembly.available
-              ? `${assembly.modules.length} sections · original positions shown by guide lines`
-              : assembly.unavailableReason}
-          </p>
+          {focusedLayer ? (
+            <>
+              <div
+                className="mt-2 flex flex-wrap items-center justify-center gap-2"
+                aria-label="Layer navigation"
+              >
+                <button
+                  className="button min-h-9 px-2 text-xs"
+                  disabled={layerIndex === assembly.modules.length - 1}
+                  onClick={() => focusLayer(layerIndex + 1)}
+                >
+                  Previous layer
+                </button>
+                <select
+                  aria-label="Current layer"
+                  className="min-h-9 max-w-full rounded border bg-surface px-2 text-xs"
+                  value={layerIndex}
+                  onChange={(event) => focusLayer(Number(event.target.value))}
+                >
+                  {assembly.modules
+                    .map((layer, index) => (
+                      <option key={layer.id} value={index}>
+                        {layer.name} · {layer.partIds.length}{" "}
+                        {layer.partIds.length === 1 ? "piece" : "pieces"}
+                      </option>
+                    ))
+                    .reverse()}
+                </select>
+                <button
+                  className="button min-h-9 px-2 text-xs"
+                  disabled={layerIndex === 0}
+                  onClick={() => focusLayer(layerIndex - 1)}
+                >
+                  Next layer
+                </button>
+              </div>
+              <p className="mt-1 text-center text-xs text-muted-foreground" aria-live="polite">
+                Layer {layerIndex + 1} of {assembly.modules.length} · {focusedLayer.partIds.length}{" "}
+                {focusedLayer.partIds.length === 1 ? "piece" : "pieces"} shown on the floor. Other
+                layers are hidden for this view.
+              </p>
+              <p className="mt-1 text-center text-xs text-muted-foreground">
+                From top to bottom · grouped by starting height, not a verified removal order.
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-center text-xs text-muted-foreground">
+              {assembly.available
+                ? `${assembly.modules.length} sections · ${assemblyMode === "layers" ? "select a piece to trace its layer" : "original positions shown by guide lines"}`
+                : assembly.unavailableReason}
+            </p>
+          )}
           {assembly.unassignedPartCount > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
               {assembly.unassignedPartCount} added parts remain in place.
@@ -550,10 +639,10 @@ export function ModelViewport(props: ModelViewportProps) {
             <p className="mt-1 text-xs text-muted-foreground">
               {placementColor?.name} ·{" "}
               {placement.target === "ground"
-                ? "Grid"
+                ? "On the floor"
                 : placement.target === "free"
                   ? "Free position"
-                  : "Connect"}
+                  : "Attach to model"}
             </p>
             <p
               className={`mt-1 text-xs font-medium ${feedback?.kind === "blocked" ? "text-danger" : feedback?.kind === "free" ? "text-warning" : "text-muted-foreground"}`}
@@ -679,9 +768,7 @@ export function ModelViewport(props: ModelViewportProps) {
               aria-label="Exploded view"
               aria-pressed={exploded}
               disabled={failed || !model.instances.length}
-              onClick={() =>
-                exploded ? closeAssembly() : openAssembly(roofAvailable ? "roof" : "layers")
-              }
+              onClick={() => (exploded ? closeAssembly() : openAssembly("layers"))}
             >
               <Layers3 size={15} />{" "}
               <span className="hidden sm:inline">{exploded ? "Assemble" : "Disassemble"}</span>
@@ -793,29 +880,6 @@ export function ModelViewport(props: ModelViewportProps) {
               >
                 <option value="orthographic">Orthographic</option>
                 <option value="perspective">Perspective</option>
-              </select>
-            </label>
-            <label>
-              Navigation device{" "}
-              <select
-                aria-label="Camera controls"
-                className="min-h-9 rounded border bg-surface px-2"
-                value={navigation}
-                onChange={(event) => {
-                  const device =
-                    event.target.value === "touch"
-                      ? "touch"
-                      : event.target.value === "trackpad"
-                        ? "trackpad"
-                        : "mouse";
-                  setNavigation(device);
-                  setPrimaryOrbit(device !== "mouse");
-                  if (device !== "mouse") setTool("select");
-                }}
-              >
-                <option value="mouse">Mouse</option>
-                <option value="trackpad">Trackpad</option>
-                <option value="touch">Touch navigation</option>
               </select>
             </label>
             <details className="relative">
@@ -953,6 +1017,7 @@ export function ModelViewport(props: ModelViewportProps) {
               exploded={exploded}
               assemblyMode={assemblyMode}
               assemblyAmount={assemblyAmount}
+              assemblyFocusId={focusedLayer?.id}
               zoom={zoom}
               quality={quality}
               view={effectiveView}
@@ -962,7 +1027,7 @@ export function ModelViewport(props: ModelViewportProps) {
               inspectionPartId={inspectionPartId}
               tool={placement ? "select" : tool}
               projection={projection}
-              navigation={effectiveNavigation}
+              primaryOrbit={primaryOrbit && !placement}
               cameraAction={cameraAction}
               fitSelection={fitSelection}
               selectThrough={selectThrough}
@@ -1195,7 +1260,9 @@ export function ModelViewport(props: ModelViewportProps) {
               <button
                 className="button min-h-9 px-2 text-xs"
                 aria-label="Fit selection"
-                disabled={!selected}
+                disabled={
+                  !selected || Boolean(focusedLayer && !focusedLayer.partIds.includes(selected))
+                }
                 onClick={() => {
                   setFitSelection(true);
                   setFitRequest((n) => n + 1);
@@ -1234,14 +1301,14 @@ export function ModelViewport(props: ModelViewportProps) {
               : placement
                 ? (feedback?.message ?? "Choose a placement")
                 : exploded
-                  ? "Sections stay together · Reassemble restores the model"
+                  ? focusedLayer
+                    ? "One layer at a time · Next layer moves downward · Reassemble restores the model"
+                    : "Sections stay together · Reassemble restores the model"
                   : tool === "move"
                     ? "Drag a part to move it · snaps every 0.4 cm · Escape cancels"
-                    : effectiveNavigation === "touch"
-                      ? "One finger orbit · two fingers zoom/pan · tap selects"
-                      : effectiveNavigation === "trackpad"
-                        ? "Drag to orbit · scroll to zoom · click Orbit again to select parts"
-                        : "Click a part to select it · choose Move to reposition · scroll to zoom"
+                    : primaryOrbit
+                      ? "Drag to orbit · scroll to zoom · choose Select to build"
+                      : "Click a part to select it · choose Move to reposition · scroll to zoom"
             : "Local model viewer"}
         </span>
         <span className="hidden 2xl:inline">{hovered ? "Part under pointer" : ""}</span>

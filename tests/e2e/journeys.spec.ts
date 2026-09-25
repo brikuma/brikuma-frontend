@@ -9,6 +9,58 @@ async function navigateProject(page: Page, name: string) {
   await projectNav(page).getByRole("link", { name, exact: true }).click();
 }
 
+test("Workspace: resume scratch work with its history, find it in search, and restore it after reload with fresh history", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Start from scratch", exact: true }).click();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-count", "0");
+  await page.getByRole("button", { name: "Add Brick 2 × 4", exact: true }).click();
+  await page.getByRole("button", { name: "Place brick", exact: true }).click();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-count", "1");
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", "blank-local-1");
+  await page
+    .getByRole("navigation", { name: "Global navigation" })
+    .getByRole("link", { name: "Workspace", exact: true })
+    .click();
+
+  const current = page.getByRole("region", { name: "Continue working" });
+  await expect(current).toContainText("1 piece");
+  await expect(current).toContainText("blank-local-1");
+  await expect(page.getByRole("link", { name: "Continue your model", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Start from scratch", exact: true })).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Search projects" }).fill("untitled");
+  await expect(current.getByRole("link", { name: "Resume Untitled exploration" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Field rover" })).toHaveCount(0);
+  await current.getByRole("link", { name: "Resume Untitled exploration" }).click();
+  await expect(page).toHaveURL(/editor\/\?project=blank/);
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-count", "1");
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", "blank-local-1");
+  await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-count", "0");
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", "blank-r1");
+  await page.getByRole("button", { name: "Redo local edit", exact: true }).click();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-count", "1");
+  await expect(page.getByLabel("Local save status", { exact: true })).toHaveText(
+    "Saved in this browser",
+  );
+  await page
+    .getByRole("navigation", { name: "Global navigation" })
+    .getByRole("link", { name: "Workspace", exact: true })
+    .click();
+  await expect(current).toContainText("1 piece");
+  await page.reload();
+  await expect(current).toContainText("1 piece");
+  await expect(current).toContainText("blank-local-1");
+  await expect(page.getByRole("link", { name: "Start from scratch", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open The courtyard house" })).toBeVisible();
+  await current.getByRole("link", { name: "Resume Untitled exploration" }).click();
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-count", "1");
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", "blank-local-1");
+  await expect(page.getByRole("button", { name: "Undo local edit", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Redo local edit", exact: true })).toBeDisabled();
+});
+
 test("FE-002: workspace categories, search, empty state and a direct sample route", async ({
   page,
 }) => {
@@ -90,6 +142,7 @@ test("FE-005 / FE-008 / FE-013: a blank scene remains coherent across navigation
 
 test("FE-009: instruction navigation, real drawing zoom and stale revision", async ({ page }) => {
   await page.goto("/instructions/?project=masseria");
+  await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
   await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
   await page.getByRole("button", { name: "Next step", exact: true }).click();
   await expect(page.getByText("Step 2 of 5 · Baseline layout")).toBeVisible();
@@ -105,6 +158,7 @@ test("FE-009: instruction navigation, real drawing zoom and stale revision", asy
   await openDetails(page, "Advanced position");
   await page.getByRole("button", { name: "Move x positive" }).click();
   await navigateProject(page, "Instructions");
+  await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
   await expect(page.getByText(/Instruction sample belongs to the original revision/)).toBeVisible();
   await expect(page.getByText(/Instruction sample masseria-instructions-r4/)).toBeVisible();
 });
@@ -183,7 +237,7 @@ test("FE-003: browser-local references reject unsupported input and show PDF met
     name: "tiny.png",
     mimeType: "image/png",
     buffer: Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nWQAAAAASUVORK5CYII=",
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNw6Vj1HwAFAAJ2nLRnZQAAAABJRU5ErkJggg==",
       "base64",
     ),
   });
@@ -244,6 +298,7 @@ test("FE-014 / FE-015 / FE-016: example review and digital listing remain truthf
   await expect(listing).toContainText(`${counts.masseria} logical pieces`);
   await expect(listing.getByRole("button", { name: /buy|pay|purchase/i })).toHaveCount(0);
   await listing.getByRole("link", { name: "View instruction example" }).click();
+  await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
   await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
 });
 

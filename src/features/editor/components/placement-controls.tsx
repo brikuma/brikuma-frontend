@@ -199,7 +199,7 @@ export function PlacementControls({
         >
           <RotateCw size={16} /> Rotate
         </button>
-        <span className="text-xs">Orientation: {placement.transform.rotation}° around Y</span>
+        <span className="text-xs">Turn: {placement.transform.rotation}°</span>
       </div>
       {placement.target === "surface" && (
         <details className="space-y-2 rounded border p-2 text-xs">

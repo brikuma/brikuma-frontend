@@ -17,47 +17,108 @@ import { partDefinitions, colors } from "@/fixtures/catalog";
 import { ModelPoster } from "@/components/model-poster";
 import { ProjectNavigation } from "@/components/shell/project-navigation";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { GeneratedInstructions } from "./generated-instructions";
 export function Instructions() {
-  const { id, model, entry, invalid, loadError, draftInstructions, generateInstructions } =
-    useProject();
+  const {
+    id,
+    model,
+    entry,
+    invalid,
+    loadError,
+    draftInstructions,
+    generateInstructions,
+    editInstructions,
+    instructionsHistory,
+    canUndoInstructions,
+    canRedoInstructions,
+    hasInstructionEdits,
+    message,
+  } = useProject();
   const [showCurated, setShowCurated] = useState(false);
   const [step, setStep] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [confirmGeneration, setConfirmGeneration] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  function generate(replaceEdited = false) {
+    if (hasInstructionEdits && !replaceEdited) {
+      setConfirmGeneration(true);
+      return false;
+    }
+    if (!generateInstructions({ replaceEdited })) return false;
+    setConfirmGeneration(false);
+    setShowCurated(false);
+    setGeneration((value) => value + 1);
+    return true;
+  }
+  const generationDialog = (
+    <Dialog
+      open={confirmGeneration}
+      onOpenChange={setConfirmGeneration}
+      title="Replace edited instructions?"
+      description="Generating again replaces your step names, notes, saved views and sequence with a new guide from the current model. Your model pieces stay unchanged."
+    >
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setConfirmGeneration(false)}>Keep my steps</Button>
+        <Button variant="primary" onClick={() => generate(true)}>
+          Replace with generated steps
+        </Button>
+      </div>
+    </Dialog>
+  );
   if (!model || !entry)
     return (
       <div className="page-wrap" role="status">
-        {loadError || "Opening instruction sample…"}
+        {loadError || "Opening your model…"}
       </div>
     );
   const sample = entry.fixture.instructions;
+  const fallbackNotice = invalid ? (
+    <p role="status" className="notice rounded-none">
+      Unknown project. Showing the courtyard sample.
+    </p>
+  ) : null;
   if (draftInstructions && !showCurated)
     return (
-      <GeneratedInstructions
-        id={id}
-        model={model}
-        draft={draftInstructions}
-        onGenerate={generateInstructions}
-        onCurated={sample ? () => setShowCurated(true) : undefined}
-      />
+      <>
+        {generationDialog}
+        {fallbackNotice}
+        <GeneratedInstructions
+          key={generation}
+          id={id}
+          model={model}
+          draft={draftInstructions}
+          onGenerate={() => generate()}
+          onEdit={editInstructions}
+          onHistory={instructionsHistory}
+          canUndo={canUndoInstructions}
+          canRedo={canRedoInstructions}
+          edited={hasInstructionEdits}
+          feedback={message}
+          onCurated={sample ? () => setShowCurated(true) : undefined}
+        />
+      </>
     );
-  if (!sample)
+  if (!showCurated || !sample)
     return (
       <>
+        {generationDialog}
         <ProjectNavigation id={id} active="instructions" />
+        {fallbackNotice}
         <div className="page-wrap">
           <BookOpen size={36} className="mb-5 text-primary" />
-          <h1 className="text-2xl">Build your model, piece by piece.</h1>
+          <p className="eyebrow mb-2">Your model, piece by piece</p>
+          <h1 className="text-2xl">{model.title}</h1>
           <p className="my-5 text-muted-foreground">
-            Generate a local instruction draft from the pieces in your model. The guide shows each
-            layer, highlights new pieces and lists their quantities.
+            Create a step-by-step draft from your current {model.instances.length}{" "}
+            {model.instances.length === 1 ? "piece" : "pieces"}. Each step highlights what to add
+            and shows where it goes, with an overhead view to help line up the studs.
           </p>
           <Button
             variant="primary"
             disabled={!model.instances.length}
             onClick={() => {
-              generateInstructions();
-              setShowCurated(false);
+              generate();
             }}
           >
             Generate instructions
@@ -73,6 +134,14 @@ export function Instructions() {
           >
             Return to editor
           </Link>
+          {sample && (
+            <div className="mt-8 border-t pt-5">
+              <Button onClick={() => setShowCurated(true)}>Original sample instructions</Button>
+              <p className="mt-2 text-xs text-muted-foreground">
+                A separate overview of the original example; it does not include your edits.
+              </p>
+            </div>
+          )}
         </div>
       </>
     );
@@ -85,6 +154,7 @@ export function Instructions() {
   });
   return (
     <>
+      {generationDialog}
       <ProjectNavigation id={id} active="instructions" />
       <div className="flex flex-wrap items-center justify-between gap-4 border-b bg-surface px-5 py-4">
         <div>
@@ -95,12 +165,14 @@ export function Instructions() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {draftInstructions && (
+            <Button onClick={() => setShowCurated(false)}>Back to my instructions</Button>
+          )}
           <Button
             variant="primary"
             disabled={!model.instances.length}
             onClick={() => {
-              generateInstructions();
-              setShowCurated(false);
+              generate();
             }}
           >
             Generate from current model
@@ -111,9 +183,7 @@ export function Instructions() {
           </Button>
         </div>
       </div>
-      {invalid && (
-        <p className="notice rounded-none">Unknown project. Showing the courtyard sample.</p>
-      )}
+      {fallbackNotice}
       {stale && (
         <div
           role="status"

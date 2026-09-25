@@ -34,8 +34,9 @@ export function ProjectBriefSummary({ projectId }: { projectId: ProjectId }) {
         ))}
       </dl>
       <p className="text-xs text-muted-foreground">
-        Session-only preferences. These do not generate geometry, enforce constraints or change the
-        model revision. Downloads contain geometry only.
+        These preferences do not generate geometry, enforce constraints or change the model
+        revision. Project backups include the brief and reference images. Check the local save
+        status; no cloud copy is connected.
       </p>
     </section>
   );

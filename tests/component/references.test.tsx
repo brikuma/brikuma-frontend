@@ -13,7 +13,12 @@ import { ProjectContextProvider } from "../../src/features/project-brief/project
 const createObjectURL = vi.fn(() => "blob:local-reference");
 const revokeObjectURL = vi.fn();
 const OriginalURL = URL;
+const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+const webpBytes = new Uint8Array([82, 73, 70, 70, 4, 0, 0, 0, 87, 69, 66, 80, 1]);
+const decodeImage = vi.fn();
 beforeEach(() => {
+  decodeImage.mockReset().mockResolvedValue({ width: 200, height: 100, close: vi.fn() });
+  vi.stubGlobal("createImageBitmap", decodeImage);
   createObjectURL.mockClear();
   revokeObjectURL.mockClear();
   vi.stubGlobal(
@@ -47,7 +52,7 @@ describe("FE-003: browser-session reference selection", () => {
     render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
-      new File(["image bytes"], "courtyard.png", { type: "image/png" }),
+      new File([pngBytes], "courtyard.png", { type: "image/png" }),
     );
     expect(screen.getByRole("img", { name: "courtyard.png" })).toBeVisible();
     expect(createObjectURL).toHaveBeenCalledOnce();
@@ -81,14 +86,13 @@ describe("FE-003: browser-session reference selection", () => {
 
   it("removes undecodable images and releases their object URL", async () => {
     const user = userEvent.setup();
+    decodeImage.mockRejectedValueOnce(new Error("Undecodable image"));
     render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
-      new File(["broken bytes"], "broken.png", { type: "image/png" }),
+      new File([pngBytes], "broken.png", { type: "image/png" }),
     );
-    const image = screen.getByRole("img", { name: "broken.png" }).querySelector("img")!;
-    fireEvent.error(image);
-    expect(screen.getByRole("alert")).toHaveTextContent("could not be decoded");
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not be read or decoded");
     expect(screen.queryByRole("img", { name: "broken.png" })).not.toBeInTheDocument();
     expect(revokeObjectURL).toHaveBeenCalledOnce();
   });
@@ -98,7 +102,7 @@ describe("FE-003: browser-session reference selection", () => {
     render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
-      new File(["image bytes"], "large.png", { type: "image/png" }),
+      new File([pngBytes], "large.png", { type: "image/png" }),
     );
     const image = screen.getByRole("img", { name: "large.png" }).querySelector("img")!;
     Object.defineProperties(image, {
@@ -116,7 +120,7 @@ describe("FE-003: browser-session reference selection", () => {
     const { unmount } = render(<ReferencePicker />, { wrapper: ProjectContextProvider });
     await user.upload(
       screen.getByLabelText("Choose reference files"),
-      new File(["image bytes"], "local.webp", { type: "image/webp" }),
+      new File([webpBytes], "local.webp", { type: "image/webp" }),
     );
     unmount();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:local-reference");

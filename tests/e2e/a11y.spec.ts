@@ -20,8 +20,13 @@ for (const path of [
       await expect(page.getByTestId("piece-count")).toHaveText(String(counts.masseria));
     if (path.startsWith("/inventory"))
       await expect(page.getByTestId("inventory-total")).toContainText(String(counts.masseria));
-    if (path.startsWith("/instructions"))
+    if (path.startsWith("/instructions")) {
+      await expect(
+        page.getByRole("button", { name: "Generate instructions", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
       await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
+    }
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
       .analyze();

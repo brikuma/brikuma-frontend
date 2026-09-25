@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   generateBuildPlan,
   isBuildPlanCurrent,
@@ -20,12 +21,14 @@ export function EditorStepPreview({
   draft,
   onGenerate,
   onView,
+  editedGuideHref,
 }: {
   model: Model;
   sample: InstructionSample | null;
   draft?: DraftBuildPlan;
   onGenerate?: () => boolean;
   onView: (view: StepView | null) => void;
+  editedGuideHref?: string;
 }) {
   const [localDraft, setLocalDraft] = useState<DraftBuildPlan>();
   const generated = draft ?? localDraft;
@@ -84,9 +87,15 @@ export function EditorStepPreview({
         Generate a local guide from the pieces you have placed. The draft follows layers from the
         ground up; it does not verify assembly order or stability.
       </p>
-      <Button disabled={!model.instances.length} onClick={generate}>
-        {generated ? "Regenerate instructions" : "Generate instructions"}
-      </Button>
+      {editedGuideHref ? (
+        <Link href={editedGuideHref} className="inline-block text-sm underline underline-offset-4">
+          Review edited instructions
+        </Link>
+      ) : (
+        <Button disabled={!model.instances.length} onClick={generate}>
+          {generated ? "Regenerate instructions" : "Generate instructions"}
+        </Button>
+      )}
       {!model.instances.length && (
         <p className="text-xs text-muted-foreground">
           Add pieces to create your first instruction step.

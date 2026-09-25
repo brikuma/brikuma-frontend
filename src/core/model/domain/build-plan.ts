@@ -11,6 +11,7 @@ export interface DraftBuildStep {
   readonly id: string;
   readonly title: string;
   readonly description: string;
+  readonly view: "isometric" | "top";
   readonly layerIndex: number;
   readonly baseHeight: number;
   readonly newPartIds: readonly string[];
@@ -31,8 +32,16 @@ export interface DraftBuildPlan {
 
 const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+export function defaultBuildStepTitle(layerIndex: number, count: number): string {
+  return `Layer ${layerIndex + 1} · ${count === 1 ? "1 piece" : `${count} pieces`}`;
+}
+
+export function defaultBuildStepDescription(count: number): string {
+  return `Place the highlighted ${count === 1 ? "piece" : "pieces"} in the positions shown. Previously placed pieces stay faded for context.`;
+}
+
 /** Exact local source identity, also guarding imports that reuse a revision string. */
-function sourceSignature(model: Model): string {
+export function buildPlanSourceSignature(model: Model): string {
   return JSON.stringify([
     model.id,
     model.revision,
@@ -55,7 +64,7 @@ export function isBuildPlanCurrent(model: Model, plan: DraftBuildPlan): boolean 
   return (
     plan.modelId === model.id &&
     plan.modelRevision === model.revision &&
-    plan.sourceSignature === sourceSignature(model)
+    plan.sourceSignature === buildPlanSourceSignature(model)
   );
 }
 
@@ -123,8 +132,9 @@ export function generateBuildPlan(
       visible.push(...added);
       steps.push({
         id: `layer-${layerIndex + 1}-step-${steps.length + 1}`,
-        title: `Layer ${layerIndex + 1} · ${added.length === 1 ? "1 piece" : `${added.length} pieces`}`,
-        description: `Place the highlighted ${added.length === 1 ? "piece" : "pieces"} in the positions shown. Previously placed pieces stay faded for context.`,
+        title: defaultBuildStepTitle(layerIndex, added.length),
+        description: defaultBuildStepDescription(added.length),
+        view: "isometric",
         layerIndex,
         baseHeight: layer.baseHeight,
         newPartIds: added,
@@ -140,7 +150,7 @@ export function generateBuildPlan(
       kind: "local-layer-draft",
       modelId: model.id,
       modelRevision: model.revision,
-      sourceSignature: sourceSignature(model),
+      sourceSignature: buildPlanSourceSignature(model),
       steps,
       layerCount: result.value.length,
       pieceCount: visible.length,

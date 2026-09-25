@@ -20,9 +20,11 @@ export function Brief() {
   );
   const { brief, setBrief } = useProjectContext(id);
   const currentTitle = useProjectTitle(id);
+  const blankTitle = useProjectTitle("blank");
   const title =
     currentTitle ?? projects.find((project) => project.id === id)?.title ?? "Your blank workspace";
   function change(field: keyof ProjectBrief, value: string) {
+    if (value.length > (field === "maxPieces" ? 100 : 10_000)) return;
     setBrief((current) => ({ ...current, [field]: value }));
   }
   return (
@@ -32,7 +34,7 @@ export function Brief() {
         <PageHeading
           eyebrow="A new beginning"
           title="What would you like to build?"
-          description={`${title} · Your brief and references follow this project during this browser session.`}
+          description={`${title} · Your brief and references belong to this local project.`}
         />
         {invalid && (
           <p className="notice mb-4">Unknown project. Showing the courtyard sample brief.</p>
@@ -42,8 +44,10 @@ export function Brief() {
             {[
               {
                 id: "scratch",
-                name: "Start from scratch",
-                description: "Your idea. Your first brick.",
+                name: blankTitle ? "Continue your model" : "Start from scratch",
+                description: blankTitle
+                  ? "Return to your local model."
+                  : "Your idea. Your first brick.",
                 icon: Box,
               },
               {
@@ -84,6 +88,7 @@ export function Brief() {
                 className="field mt-2 min-h-24"
                 placeholder="A quiet courtyard, a curious creature, a rover for another world…"
                 value={brief.subject}
+                maxLength={10_000}
                 onChange={(event) => change("subject", event.target.value)}
               />
             </label>
@@ -161,6 +166,7 @@ export function Brief() {
                 className="field mt-2"
                 placeholder="Ivory, terracotta, a touch of teal"
                 value={brief.colors}
+                maxLength={10_000}
                 onChange={(event) => change("colors", event.target.value)}
               />
             </label>
@@ -190,10 +196,10 @@ export function Brief() {
               </div>
             </fieldset>
             <p className="text-xs text-muted-foreground">
-              These are your declared preferences, not enforced model constraints. They stay with
-              this project across pages until reload; they do not generate or validate geometry.
-              Project downloads currently contain geometry only, without this brief or reference
-              files.
+              These are your declared preferences, not enforced model constraints. They do not
+              generate or validate geometry. Project backups include this brief, reference images
+              and declared scales; PDF references retain filenames only. Local storage belongs to
+              this browser and site address. Check the save status and keep a backup before leaving.
             </p>
           </section>
           <aside className="min-w-0 space-y-6">
@@ -230,9 +236,9 @@ export function Brief() {
             </Link>
           </Dialog>
           <Link href={`/editor/?project=${id}`} className="button button-primary min-h-11">
-            {existing
+            {currentTitle
               ? "Return to workbench"
-              : entry === "concepts"
+              : id !== "blank"
                 ? "Explore a sample"
                 : "Open blank workspace"}
             <ArrowRight size={18} />

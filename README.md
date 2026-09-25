@@ -18,6 +18,6 @@ npm run preview
 
 The static build outputs `out/`. The preview command serves exported files; no application server is needed at runtime. See the manifest for available scripts and [quality](docs/engineering/QUALITY.md) for their required behavior. Installation is not considered verified until acceptance records its actual result.
 
-Routes: `/`, `/new`, `/editor`, `/instructions`, `/inventory`, `/community`, `/marketplace`, `/plans`, `/design-system`. Project selection uses allowlisted query values. Full reload resets in-memory edits; changes survive client navigation during the session.
+Routes: `/`, `/new`, `/editor`, `/instructions`, `/inventory`, `/community`, `/marketplace`, `/plans`, `/design-system`. Project selection uses four allowlisted slots. Browser-local saves restore models, edited instructions, briefs and references after reload; portable project files provide explicit backups. Undo histories survive client navigation but start fresh after restoration, and camera state is not saved. See [local projects](docs/engineering/LOCAL_PROJECTS.md) for storage, recovery and file boundaries.
 
 [Acceptance](docs/delivery/ACCEPTANCE.md) distinguishes executed checks from pending/unavailable checks. [Handoff](docs/ai/HANDOFF.md) records current limitations. Approved remote URLs are not available; submodule registration remains blocked. BRIKUMA is not affiliated with or certified by LEGO.

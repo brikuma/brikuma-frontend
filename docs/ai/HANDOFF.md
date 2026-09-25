@@ -1,6 +1,38 @@
 # Frontend handoff
 
-ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-24, general-purpose workspace follow-up.
+ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-25, local project continuity and portable backups.
+
+## Authorized commit checkpoint — 2026-09-25
+
+The owner authorized a local frontend commit of the accumulated usability and continuity slices. The [commit acceptance record](../delivery/ACCEPTANCE.md#authorized-local-commit-review--2026-09-25) distinguishes exact staged verification, independent review, actual hooks and final committed-HEAD gates from the earlier uncommitted checkpoints below. The root remains unchanged; no approved integration pin or push is included.
+
+Review corrections reset reference-panel drafts after project replacement and keep edited step IDs/text within the portable format. Regressions cover importing a backup that reuses reference IDs and splitting a valid imported 128-character step identity before a backup round trip. Browser reference fixtures now contain valid PNG data; surface placement checks actual connector coordinates and preview/commit equality independently of camera quadrant. The changelog, canonical contracts and traceability accompany the same candidate. Final identity and actual hook results are in ignored `artifacts/local-projects/commit-manifest.json`; exact-tree check/review evidence remains in `artifacts/quality/`.
+
+## Local project continuity checkpoint — 2026-09-25
+
+[FE-DEC-019](../DECISIONS.md#fe-dec-019-local-project-continuity-and-portable-backups) adds IndexedDB restoration before fixture loading, serialized version-checked saves and clear pending/saved/error feedback. New project backups include the current model, edited guide and source snapshot, brief, validated image bytes and calibration, plus PDF metadata. Legacy scene files remain importable. Image decoding runs independently of the visible reference panel; restored object URLs are transient. Import validates the complete document before replacement, and conflicts preserve both the stored record and the open unsaved work.
+
+[Acceptance](../delivery/ACCEPTANCE.md#local-project-continuity-and-portable-backups--2026-09-25) records 726 passing deterministic tests, fresh lint/build/format and bundle checks, and production Chrome reload, actual backup/import and two-tab conflict journeys, including a 390px inspection. Playwright/axe were not run; dependencies and backend remain unchanged. The [local-project contract](../engineering/LOCAL_PROJECTS.md) supersedes earlier session-only and geometry-only download statements in historical checkpoints below. No commit or staging occurred.
+
+Storage remains local to the browser and origin, with four existing route slots. External backups remain necessary because browser data can be cleared; undo histories and camera state are not persisted. Follow the [UX backlog](../product/UX_REVIEW.md#follow-up-backlog) for mixed-piece building/repair, meaningful subassemblies and guide reconciliation, then arbitrary project identities/renaming and preferences. No physical buildability, finished production product or cloud service is claimed.
+
+## Readable sections and editable steps checkpoint — 2026-09-25
+
+[FE-DEC-018](../DECISIONS.md#fe-dec-018-readable-sections-and-editable-instruction-drafts) supersedes the earlier all-layer default: Disassemble isolates the highest layer, supports Previous/Next/direct choice and keeps the full overview optional. Instructions now support title/notes, saved 3D/top views, adjacent reorder, split/merge, forty-entry editorial history, current-step framing and a paged step list. Edited guides require explicit replacement before regeneration; the editor links back to review them. These operations preserve the canonical model and survive client navigation.
+
+[Acceptance](../delivery/ACCEPTANCE.md#readable-sections-and-editable-steps--2026-09-25) records 648 passing deterministic tests, final focused review regressions, build/bundle checks and stable production Chrome desktop/mobile operation. Playwright/axe were not run; no commit, dependency or backend change occurred. The current [UX backlog](../product/UX_REVIEW.md#follow-up-backlog) retains mixed-piece building/repair, real assembly sequencing, meaningful subassemblies and guide portability. Height groups, local schematic drawings and manually edited order are not physical validation. Guide edits still clear on reload and are absent from scene downloads.
+
+## Beginner building checkpoint — 2026-09-25
+
+The current working tree also implements [FE-DEC-017](../DECISIONS.md#fe-dec-017-simple-manual-building-and-current-model-instructions): unified camera input, full layer separation at 100% with bounds-aware camera clipping, a validated initial attachment preview, and current-model instructions with 3D/top drawings. Selected-layer guides avoid a dense web of origin lines; changing tools cancels an active drag correctly. The canonical model and existing strict-placement rules remain authoritative. Both supplied product/competitor chats were inspected and recorded in [provenance](../references/README.md#september-25-product-and-competitor-conversations).
+
+[Acceptance](../delivery/ACCEPTANCE.md#beginner-building-and-current-model-instructions--2026-09-25) records 623 passing deterministic tests, build/bundle checks, live Chrome scratch/Masseria journeys and 390px instruction inspection. Playwright/axe were not run. No commit or dependency change occurred. Next priorities are the mixed-piece beginner build-and-repair journey, readable sectional disassembly for large models and editable assembly steps. The earlier catalog-preference follow-up below is now lower priority; [UX review](../product/UX_REVIEW.md#follow-up-backlog) owns the current order. The generator remains a schematic height-ordered draft, not a verified physical assembly planner.
+
+## Workspace rediscovery checkpoint — 2026-09-25
+
+The current uncommitted follow-up implements [FE-DEC-016](../DECISIONS.md#fe-dec-016-discover-and-resume-browser-session-work): home now exposes loaded models and brief-only session work, uses current quantities/identity, and distinguishes resume actions from fresh entry. Search covers both current work and remaining sample slots. Model and brief state, history and reload boundaries remain unchanged. [Acceptance](../delivery/ACCEPTANCE.md#workspace-rediscovery--2026-09-25) records 594 passing deterministic tests, successful build/bundle checks, zero known audit findings and live Chrome desktop/390px journeys; Playwright/axe were not rerun. No commit, push or dependency change occurred.
+
+The [incremental UX review](../product/UX_REVIEW.md) is the continuation list. Next: reproduce Favorites/Recent loss through normal project navigation, then preserve their intended lifetime. Creating and naming a second independent model remains a separately scoped product gap. These are agent observations and code findings, not participant research.
 
 ## General-purpose workspace checkpoint
 
@@ -26,7 +58,7 @@ The specialist editor was committed as `335a332`, followed by tracked pattern sk
 - Grid, Connect and Free previews share core validation. The declared rectangular subset has deterministic stud/receptacle candidates and render-independent occupied-volume checks. Custom geometry can remain not checked; physical stability and forces are not evaluated.
 - Build/Inspect/Present share one canonical model. Focus, hiding, sectioning, explosion, curated steps and camera state are presentation layers.
 - Real local experiments show exact impact and reject stale acceptance. Same-footprint replacement preserves instance identity and requires explicit acknowledgement for unknown compatibility.
-- References stay local in memory. Versioned project files and 1024/2048-square PNGs are actual downloads, with no automatic model persistence or cloud claim.
+- Local browser saves and versioned project backups retain model, edited guide/source, brief, image references and calibration. PNG exports remain separate visual downloads; PDF references retain metadata only. There is no cloud storage.
 - Original placement lab: 28 parts; courtyard study: 213; existing visual rover: 44. Deterministic 1,000/5,000-part stress fixtures are opt-in.
 
 The [requirement register](../editor/README.md) maps EDR-001–036 to implementation and acceptance IDs. [Evidence](../editor/EVIDENCE.md) is the authoritative run ledger, with measured performance, visual artifacts and browser limits. The [modeling](../editor/MODELING.md), [rendering](../editor/RENDERING.md) and [experience](../editor/EXPERIENCE.md) documents explain actual contracts.
@@ -41,8 +73,8 @@ Generated verification/review records in `artifacts/quality/` bind checks to the
 
 EDR-029 is blocked by absent verified hinge geometry/pivot/axis/range metadata. No simulated mechanical validity is claimed. P2 remains deferred. Human participant count is zero; field performance, real iPad/touch/trackpad hardware and screen-reader behavior are not measured. Automated narrow layouts and WebKit are not device certification. Firefox launch availability and performance targets retain the actual statuses in evidence.
 
-The later broad master prompt is only partially applied through this editor slice. Clipboard copy/paste, marquee selection, additional measurement workflows and product-page expansion have not been implemented here. Catalog preferences remain in memory; there is no added autosave, AI service or cloud persistence.
+The later broad master prompt is only partially applied through this editor slice. Clipboard copy/paste, marquee selection, additional measurement workflows and product-page expansion have not been implemented here. Catalog preferences remain in memory. Project content now has browser-local autosave; there is no AI service or cloud persistence.
 
 The next smallest unresolved editor risk is real-device touch/trackpad gesture arbitration. Dense connector/diagnostic query costs need separate workloads beyond the measured rendering and selection baseline. General magnetic screen-space snapping, free-angle gizmos, adaptive quality and arbitrary CAD support remain outside the declared bounded contracts.
 
-Launch from this repository with `npm run dev -- --port 3000`, then open `/editor/?project=blank`. Production verification uses `npm run build` and `npm run preview` at port 4173. Explicitly download a project file to retain edits across reloads.
+Launch from this repository with `npm run dev -- --port 3000`, then open `/editor/?project=blank`. Production verification uses `npm run build` and `npm run preview` at port 4173. Check the local save status and explicitly download a project file as a separate backup. These two site origins have separate browser storage.

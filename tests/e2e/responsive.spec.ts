@@ -251,21 +251,32 @@ test("Studio: surface placement aligns a single brick to the support connectors"
   await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
   await page.getByRole("button", { name: "Add Brick 1 × 1", exact: true }).click();
   await page.getByRole("button", { name: "Attach to model", exact: true }).click();
+  await openDetails(page, "Advanced placement");
   const box = (await page.locator("canvas").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2 + 4, box.y + box.height / 2 + 4);
   await expect(page.getByText("1 stud aligned · click to attach").first()).toBeVisible();
+  const preview = {
+    x: await page.getByRole("spinbutton", { name: "Placement X", exact: true }).inputValue(),
+    y: await page.getByRole("spinbutton", { name: "Placement Y", exact: true }).inputValue(),
+    z: await page.getByRole("spinbutton", { name: "Placement Z", exact: true }).inputValue(),
+  };
+  // Camera framing may choose either row; the proposal must target an actual support stud.
+  expect([-1.2, -0.4, 0.4, 1.2]).toContain(Number(preview.x));
+  expect([-0.4, 0.4]).toContain(Number(preview.z));
+  expect(Number(preview.y)).toBe(1.44);
+  await expect(page.getByTestId("piece-count")).toHaveText("1");
   await page.screenshot({ path: "artifacts/screenshots/brick-connector-preview.png" });
   await page.mouse.click(box.x + box.width / 2 + 4, box.y + box.height / 2 + 4);
   await expect(page.getByTestId("piece-count")).toHaveText("2");
   await openDetails(page, "Advanced position");
   await expect(page.getByRole("spinbutton", { name: "Position X", exact: true })).toHaveValue(
-    "0.4",
+    preview.x,
   );
   await expect(page.getByRole("spinbutton", { name: "Position Z", exact: true })).toHaveValue(
-    "0.4",
+    preview.z,
   );
   await expect(page.getByRole("spinbutton", { name: "Position Y", exact: true })).toHaveValue(
-    "1.44",
+    preview.y,
   );
   await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("iso");
   await page.screenshot({ path: "artifacts/screenshots/brick-surface-connection.png" });
@@ -335,8 +346,13 @@ test("FE-019: narrow routes reflow without page-level horizontal overflow", asyn
     await expect(page.getByRole("main")).toBeVisible();
     if (path.startsWith("/inventory"))
       await expect(page.getByTestId("inventory-total")).toContainText(String(counts.masseria));
-    if (path.startsWith("/instructions"))
+    if (path.startsWith("/instructions")) {
+      await expect(
+        page.getByRole("button", { name: "Generate instructions", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Original sample instructions", exact: true }).click();
       await expect(page.getByText("Step 1 of 5 · Baseline layout")).toBeVisible();
+    }
     const layout = await page.evaluate(() => ({
       fits: document.documentElement.scrollWidth <= window.innerWidth + 1,
       offenders: Array.from(document.querySelectorAll("main *"))

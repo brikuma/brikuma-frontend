@@ -30,6 +30,7 @@ export function useEditorReferences(projectId: ProjectId = "blank") {
     setCalibrations,
     addReferences,
     removeReference,
+    referenceError,
   } = useProjectContext(projectId);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -83,7 +84,7 @@ export function useEditorReferences(projectId: ProjectId = "blank") {
     setReferences,
     activeId,
     setActiveId,
-    error,
+    error: error || referenceError,
     setError,
     anchors,
     setAnchors,
@@ -96,6 +97,11 @@ export function useEditorReferences(projectId: ProjectId = "blank") {
     calibration,
     scale,
     remove,
+    resetPanel() {
+      setActiveId(null);
+      setError("");
+      setDrafts({});
+    },
   };
 }
 
@@ -131,8 +137,8 @@ function ReferenceBoard({ state }: { state: EditorReferenceState }) {
   return (
     <section aria-label="Local reference board" className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Pin images beside the model. References follow this project during navigation and clear on
-        reload.
+        Pin images beside the model. Local project backups include images and declared scales. Check
+        the local save status before leaving; no cloud upload is connected.
       </p>
       <label className="block text-sm font-medium">
         Choose local images
@@ -173,8 +179,10 @@ function ReferenceBoard({ state }: { state: EditorReferenceState }) {
       </ul>
       {active && !active.url && (
         <p className="rounded-lg border bg-background p-3 text-xs text-muted-foreground">
-          {active.filename} · PDF · filename only, not parsed. {active.size} bytes. No preview or
-          scale declaration is available for PDF references.
+          {active.filename} ·{" "}
+          {active.type.startsWith("image/")
+            ? "Image preview unavailable. Local image bytes are retained."
+            : `PDF · filename only, not parsed. ${active.size} bytes. No preview or scale declaration is available for PDF references.`}
         </p>
       )}
       {active?.url && (
@@ -192,9 +200,14 @@ function ReferenceBoard({ state }: { state: EditorReferenceState }) {
                   return;
                 }
                 setReferences((current) =>
-                  current.map((item) =>
-                    item.id === active.id ? { ...item, width, height } : item,
-                  ),
+                  current.some(
+                    (item) =>
+                      item.id === active.id && (item.width !== width || item.height !== height),
+                  )
+                    ? current.map((item) =>
+                        item.id === active.id ? { ...item, width, height } : item,
+                      )
+                    : current,
                 );
               }}
               onError={() => {

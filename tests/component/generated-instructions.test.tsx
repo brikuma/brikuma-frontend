@@ -11,8 +11,14 @@ import {
 } from "../../src/features/editor/components/editor-steps";
 import { Instructions } from "../../src/features/instructions/instructions";
 
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams("project=blank") }));
-afterEach(cleanup);
+const navigation = vi.hoisted(() => ({ query: "project=blank" }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(navigation.query),
+}));
+afterEach(() => {
+  cleanup();
+  navigation.query = "project=blank";
+});
 
 function Harness({ onView }: { onView: (value: StepView | null) => void }) {
   const project = useProject();
@@ -90,6 +96,45 @@ async function openBuiltModel(onView = vi.fn()) {
 }
 
 describe("Generated local instructions", () => {
+  it("explains an unknown project fallback in the entry, generated and original guides", async () => {
+    navigation.query = "project=missing-project";
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <Instructions />
+      </SessionProvider>,
+    );
+    const notice = "Unknown project. Showing the courtyard sample.";
+    expect(await screen.findByText(notice)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Generate instructions" }));
+    expect(screen.getByText(notice)).toBeVisible();
+    expect(screen.getByText(/Local instruction draft/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Original sample instructions" }));
+    expect(screen.getByText(notice)).toBeVisible();
+    expect(screen.getByText(/Instruction sample/)).toBeVisible();
+  });
+
+  it("opens a current-model generation entry for an example and keeps its original guide opt-in", async () => {
+    navigation.query = "project=masseria";
+    const user = userEvent.setup();
+    render(
+      <SessionProvider>
+        <Instructions />
+      </SessionProvider>,
+    );
+    expect(await screen.findByRole("button", { name: "Generate instructions" })).toBeEnabled();
+    expect(screen.getByText(/Create a step-by-step draft from your current/)).toBeVisible();
+    expect(screen.queryByRole("navigation", { name: "Instruction steps" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Original sample instructions" }));
+    expect(screen.getByText(/Instruction sample/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Generate from current model" }));
+    expect(screen.getByText(/Local instruction draft/)).toBeVisible();
+    expect(screen.getByRole("img", { name: /Instruction drawing/ })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Original sample instructions" }));
+    await user.click(screen.getByRole("button", { name: "Back to my instructions" }));
+    expect(screen.getByText(/Local instruction draft/)).toBeVisible();
+  });
+
   it("generates from a user model and keeps exact steps when switching to the instruction route", async () => {
     const { user, onView } = await openBuiltModel();
     const revision = screen.getByTestId("current-revision").textContent;
@@ -101,18 +146,30 @@ describe("Generated local instructions", () => {
     expect(screen.getByText(/2 pieces · 2 layers · 2 steps/)).toBeVisible();
     expect(
       screen.getByRole("img", {
-        name: "Instruction drawing: 1 highlighted piece, 1 piece shown",
+        name: "Instruction drawing: 3D view, 1 highlighted piece, 1 piece shown",
       }),
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Next step" }));
     expect(
       screen.getByRole("img", {
-        name: "Instruction drawing: 1 highlighted piece, 2 pieces shown",
+        name: "Instruction drawing: 3D view, 1 highlighted piece, 2 pieces shown",
       }),
     ).toBeVisible();
     expect(screen.getByText("Brick 1 × 1")).toBeVisible();
     expect(screen.getByTestId("current-revision")).toHaveTextContent(revision!);
     expect(screen.getByTestId("current-count")).toHaveTextContent("2");
+    await user.click(screen.getByRole("button", { name: "Top view" }));
+    expect(screen.getByRole("button", { name: "Top view" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText(/Top view: line up the studs/)).toBeVisible();
+    expect(
+      screen.getByRole("img", {
+        name: "Instruction drawing: Top view, 1 highlighted piece, 2 pieces shown",
+      }),
+    ).toBeVisible();
+    expect(screen.getByTestId("current-revision")).toHaveTextContent(revision!);
   });
 
   it("keeps the old snapshot visibly stale until explicit regeneration updates it", async () => {
