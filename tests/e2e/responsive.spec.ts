@@ -1,5 +1,5 @@
 import counts from "../../src/fixtures/scene-counts.json";
-import { chromium, expect, test } from "@playwright/test";
+import { chromium, expect, test, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { openDetails, openInspector } from "./editor-controls";
 
@@ -50,7 +50,7 @@ test("FE-019: responsive editor, reduced motion and screenshot matrix", async ({
   }
 });
 
-test("FE-004: actual renderer activation preserves accessible HTML selection", async ({ page }) => {
+async function openRenderedCourtyard(page: Page) {
   const renderingErrors: string[] = [];
   page.on("pageerror", (error) => renderingErrors.push(error.message));
   page.on("console", (message) => {
@@ -67,6 +67,19 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
   await expect(page.getByTestId("model-viewport")).toHaveAttribute("data-scene-ready", "true", {
     timeout: 20000,
   });
+  return renderingErrors;
+}
+
+async function selectRoofPart(page: Page) {
+  await page.getByRole("button", { name: "Structure", exact: true }).click();
+  await page.getByRole("button", { name: "Select Roof" }).click();
+  await openInspector(page);
+  await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
+  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
+}
+
+test("FE-004: actual renderer switches between every quality profile", async ({ page }) => {
+  const renderingErrors = await openRenderedCourtyard(page);
   await page.screenshot({
     path: "artifacts/screenshots/editor-studio-1440x900.png",
     fullPage: true,
@@ -84,6 +97,17 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
       animations: "disabled",
     });
   }
+  await selectRoofPart(page);
+  expect(renderingErrors).toEqual([]);
+});
+
+test("FE-004: studio camera tools preserve accessible HTML selection", async ({ page }) => {
+  const renderingErrors = await openRenderedCourtyard(page);
+  await openDetails(page, "View tools");
+  await page.getByRole("combobox", { name: "Render quality", exact: true }).selectOption("studio");
+  await expect(page.getByRole("combobox", { name: "Render quality", exact: true })).toHaveValue(
+    "studio",
+  );
   await page.getByRole("button", { name: "Show workspace grid", exact: true }).click();
   await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
   await page.getByRole("button", { name: "Show dimensions", exact: true }).click();
@@ -94,11 +118,7 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
   await page.getByRole("button", { name: "Show dimensions", exact: true }).click();
   await page.getByRole("button", { name: "Show workspace grid", exact: true }).click();
   await page.getByRole("button", { name: "Fit model to view", exact: true }).click();
-  await page.getByRole("button", { name: "Structure", exact: true }).click();
-  await page.getByRole("button", { name: "Select Roof" }).click();
-  await openInspector(page);
-  await page.getByRole("combobox", { name: "Choose a logical part" }).selectOption("roof-0-0");
-  await expect(page.getByRole("combobox", { name: "Part color", exact: true })).toBeEnabled();
+  await selectRoofPart(page);
   await page.getByRole("button", { name: "Zoom in model" }).click();
   await page.getByRole("button", { name: "Fit model to view" }).click();
   await page.screenshot({
@@ -106,6 +126,21 @@ test("FE-004: actual renderer activation preserves accessible HTML selection", a
     fullPage: true,
     animations: "disabled",
   });
+  expect(renderingErrors).toEqual([]);
+});
+
+test("FE-004: studio assembly views preserve the model and context-loss fallback", async ({
+  page,
+}) => {
+  const renderingErrors = await openRenderedCourtyard(page);
+  await openDetails(page, "View tools");
+  await page.getByRole("combobox", { name: "Render quality", exact: true }).selectOption("studio");
+  await expect(page.getByRole("combobox", { name: "Render quality", exact: true })).toHaveValue(
+    "studio",
+  );
+  await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("top");
+  await selectRoofPart(page);
+  await page.getByRole("button", { name: "Fit model to view", exact: true }).click();
   await openDetails(page, "View tools");
   await page.getByRole("button", { name: "Roof access", exact: true }).click();
   await expect(page.getByRole("slider", { name: "Assembly separation" })).toHaveValue("100");

@@ -213,14 +213,15 @@ describe("Repositioning a placed piece", () => {
     const user = await open();
     const original = model();
     await keys(user, "r");
+    const reposition = within(screen.getByRole("region", { name: "Reposition piece" }));
     for (let turn = 2; turn <= 4; turn++) {
-      await user.click(screen.getByRole("button", { name: "Rotate pending brick" }));
+      await user.click(reposition.getByRole("button", { name: "Rotate pending brick" }));
       expect(preview()!.transform.rotation).toBe((turn * 90) % 360);
       expect(model()).toEqual(original);
       expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
     }
     expect(preview()!.transform).toEqual(original.instances[1].transform);
-    await user.click(screen.getByRole("button", { name: "Apply move" }));
+    await user.click(reposition.getByRole("button", { name: "Apply move" }));
     expect(preview()).toBeNull();
     expect(model()).toEqual(original);
     expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
@@ -249,21 +250,22 @@ describe("Repositioning a placed piece", () => {
     const user = await open();
     const original = model();
     await user.click(screen.getByRole("button", { name: "Rotate 90°" }));
-    await user.click(screen.getByRole("button", { name: "On the floor" }));
-    expect(screen.getByRole("button", { name: "Apply move" })).toBeDisabled();
+    const reposition = within(screen.getByRole("region", { name: "Reposition piece" }));
+    await user.click(reposition.getByRole("button", { name: "On the floor" }));
+    expect(reposition.getByRole("button", { name: "Apply move" })).toBeDisabled();
     expect(screen.getByText(/This position overlaps another piece/)).toBeVisible();
     await keys(user, "{Enter}");
     expect(model()).toEqual(original);
     expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
-    await user.click(screen.getByRole("button", { name: "Attach to model" }));
+    await user.click(reposition.getByRole("button", { name: "Attach to model" }));
     expect(preview()).toMatchObject({
       target: "surface",
       colorId: "teal",
       transform: { rotation: 90, y: 1.8 },
       editing: { instanceId: "moving" },
     });
-    expect(screen.getByRole("button", { name: "Apply move" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Apply move" }));
+    expect(reposition.getByRole("button", { name: "Apply move" })).toBeEnabled();
+    await user.click(reposition.getByRole("button", { name: "Apply move" }));
     expect(model().instances.map((part) => part.id)).toEqual(
       original.instances.map((part) => part.id),
     );
@@ -277,14 +279,15 @@ describe("Repositioning a placed piece", () => {
     };
     const user = await open(solo);
     await user.click(screen.getByRole("button", { name: "Move piece" }));
-    expect(screen.getByRole("button", { name: "Attach to model" })).toBeDisabled();
+    const reposition = within(screen.getByRole("region", { name: "Reposition piece" }));
+    expect(reposition.getByRole("button", { name: "Attach to model" })).toBeDisabled();
     await expand(user, "Advanced placement");
-    await user.click(screen.getByRole("button", { name: "Connect" }));
-    const height = screen.getByRole("spinbutton", { name: "Placement Y" });
+    await user.click(reposition.getByRole("button", { name: "Connect" }));
+    const height = reposition.getByRole("spinbutton", { name: "Placement Y" });
     await user.clear(height);
     await user.type(height, "1.44");
-    await user.click(screen.getByRole("button", { name: "Update preview" }));
-    expect(screen.getByRole("button", { name: "Apply move" })).toBeDisabled();
+    await user.click(reposition.getByRole("button", { name: "Update preview" }));
+    expect(reposition.getByRole("button", { name: "Apply move" })).toBeDisabled();
     await keys(user, "{Enter}");
     expect(model()).toEqual(solo);
     expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
@@ -303,16 +306,17 @@ describe("Repositioning a placed piece", () => {
     const initialModel = { ...mixedModel, instances: [mixedModel.instances[0], source, obstacle] };
     const user = await open(initialModel);
     await user.click(screen.getByRole("button", { name: "Move piece" }));
+    const reposition = within(screen.getByRole("region", { name: "Reposition piece" }));
     await keys(user, "{ArrowRight}{ArrowRight}");
-    expect(screen.getByRole("button", { name: "Apply move" })).toBeDisabled();
+    expect(reposition.getByRole("button", { name: "Apply move" })).toBeDisabled();
     await keys(user, "{Enter}");
     expect(model()).toEqual(initialModel);
     expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
     await expand(user, "Advanced placement");
-    await user.click(screen.getByRole("button", { name: "Free position" }));
+    await user.click(reposition.getByRole("button", { name: "Free position" }));
     expect(screen.getByText("Free position · unverified draft")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Apply move" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "Apply move" }));
+    expect(reposition.getByRole("button", { name: "Apply move" })).toBeEnabled();
+    await user.click(reposition.getByRole("button", { name: "Apply move" }));
     expect(model().instances[1].transform).toEqual(obstacle.transform);
     expect(model().instances[2]).toEqual(obstacle);
     expect(deriveBom(model())).toEqual(deriveBom(initialModel));
@@ -322,8 +326,9 @@ describe("Repositioning a placed piece", () => {
   it("locks other inspector edits while a move is pending", async () => {
     const user = await open();
     const original = model();
+    const inspector = within(screen.getByRole("complementary", { name: "Project inspector" }));
     await expand(user, "Advanced position");
-    await user.click(screen.getByRole("button", { name: "Move piece" }));
+    await user.click(inspector.getByRole("button", { name: "Move piece" }));
     for (const name of [
       "Duplicate",
       "Rotate 90°",
@@ -331,8 +336,8 @@ describe("Repositioning a placed piece", () => {
       "Apply position",
       "Rotate as draft",
     ])
-      expect(screen.getByRole("button", { name })).toBeDisabled();
-    expect(screen.getByRole("combobox", { name: "Part color" })).toBeDisabled();
+      expect(inspector.getByRole("button", { name })).toBeDisabled();
+    expect(inspector.getByRole("combobox", { name: "Part color" })).toBeDisabled();
     await keys(user, "{Delete}{Control>}d{/Control}");
     expect(model()).toEqual(original);
     expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
@@ -357,17 +362,19 @@ describe("Repositioning a placed piece", () => {
     const original = model();
     await user.click(screen.getByRole("button", { name: "Structure" }));
     await user.click(screen.getByRole("button", { name: "Select Colored detail" }));
+    const selection = within(screen.getByRole("region", { name: "Selection commands" }));
     await expand(user, "Group & scope");
-    await user.click(screen.getByRole("button", { name: "Enter group" }));
+    await user.click(selection.getByRole("button", { name: "Enter group" }));
     await user.click(screen.getByRole("button", { name: "Select canvas piece moving" }));
     await user.click(screen.getByRole("button", { name: "Move piece" }));
+    const reposition = within(screen.getByRole("region", { name: "Reposition piece" }));
     await expand(user, "Choose a surface from the list");
-    const candidates = screen.getByRole("list", { name: "Connector candidates" });
+    const candidates = reposition.getByRole("list", { name: "Connector candidates" });
     expect(within(candidates).queryAllByRole("button")).toHaveLength(0);
     expect(screen.getByText(/No eligible targets nearby/)).toBeVisible();
     expect(model()).toEqual(original);
     expect(screen.getByTestId("model-history")).toHaveTextContent(/^0$/);
-    await user.click(screen.getByRole("button", { name: "Cancel move" }));
+    await user.click(reposition.getByRole("button", { name: "Cancel move" }));
     expect(model()).toEqual(original);
   });
 });

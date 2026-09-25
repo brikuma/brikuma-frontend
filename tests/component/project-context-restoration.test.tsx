@@ -258,6 +258,7 @@ describe("Restoring local project reference ownership", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("image data is retained");
     expect(screen.getByLabelText("Blank subject")).toHaveTextContent("Retained");
     expect(screen.getByLabelText("Blank reference URLs")).toHaveTextContent("pending");
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
     const latest = onChange.mock.calls.at(-1)?.[0] as ProjectContexts;
     expect(latest.blank?.references[0]).toMatchObject({
       blob: original.references[0].blob,

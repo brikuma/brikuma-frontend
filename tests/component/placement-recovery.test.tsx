@@ -68,11 +68,14 @@ function preview(): PlacementPreview {
 function model(): Model {
   return JSON.parse(screen.getByTestId("rendered-model").textContent!);
 }
+function pendingPlacement() {
+  return within(screen.getByRole("region", { name: "Pending brick placement" }));
+}
 async function quarterTurn(user: ReturnType<typeof userEvent.setup>, keyboard: boolean) {
   if (keyboard) {
     screen.getByRole("region", { name: "Modeling workspace" }).focus();
     await user.keyboard("r");
-  } else await user.click(screen.getByRole("button", { name: "Rotate pending brick" }));
+  } else await user.click(pendingPlacement().getByRole("button", { name: "Rotate pending brick" }));
 }
 
 describe("Recovering and rotating a pending brick", () => {
@@ -107,7 +110,7 @@ describe("Recovering and rotating a pending brick", () => {
   it("rotates an attached rectangular brick on the same support and at the same height", async () => {
     const user = await openWorkbench();
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 6" }));
-    await user.click(screen.getByRole("button", { name: "Place brick" }));
+    await user.click(pendingPlacement().getByRole("button", { name: "Place brick" }));
     const originalModel = model();
     const supportId = originalModel.instances[0].id;
     await user.click(screen.getByRole("button", { name: "Add Brick 1 × 2" }));
@@ -128,7 +131,7 @@ describe("Recovering and rotating a pending brick", () => {
       );
       expect(contacts.length).toBeGreaterThan(0);
       expect(contacts.every((contact) => contact.supportId === supportId)).toBe(true);
-      expect(screen.getByRole("button", { name: "Place brick" })).toBeEnabled();
+      expect(pendingPlacement().getByRole("button", { name: "Place brick" })).toBeEnabled();
       expect(model()).toEqual(originalModel);
       expect(screen.getByTestId("undo-count")).toHaveTextContent(/^1$/);
     }
@@ -138,33 +141,35 @@ describe("Recovering and rotating a pending brick", () => {
   it("recovers from an overlapping floor preview by attaching again with its chosen color and turn", async () => {
     const user = await openWorkbench();
     await user.click(screen.getByRole("button", { name: "Add Brick 2 × 6" }));
-    await user.click(screen.getByRole("button", { name: "Place brick" }));
+    await user.click(pendingPlacement().getByRole("button", { name: "Place brick" }));
     const originalModel = model();
     await user.click(screen.getByRole("button", { name: "Add Brick 1 × 2" }));
     await user.selectOptions(
-      screen.getByRole("combobox", { name: "Pending brick color" }),
+      pendingPlacement().getByRole("combobox", { name: "Pending brick color" }),
       "terracotta",
     );
     await quarterTurn(user, false);
     const attached = preview();
-    await user.click(screen.getByRole("button", { name: "On the floor" }));
-    expect(screen.getByRole("button", { name: "Place brick" })).toBeDisabled();
-    expect(screen.getByText(/This position overlaps another piece/)).toBeVisible();
+    await user.click(pendingPlacement().getByRole("button", { name: "On the floor" }));
+    expect(pendingPlacement().getByRole("button", { name: "Place brick" })).toBeDisabled();
+    expect(pendingPlacement().getByText(/This position overlaps another piece/)).toBeVisible();
     expect(model()).toEqual(originalModel);
     expect(screen.getByTestId("undo-count")).toHaveTextContent(/^1$/);
 
-    await user.click(screen.getByRole("button", { name: "Attach to model" }));
+    await user.click(pendingPlacement().getByRole("button", { name: "Attach to model" }));
     const recovered = preview();
     expect(recovered).toMatchObject({
       target: "surface",
       colorId: "terracotta",
       transform: { rotation: 90, y: attached.transform.y },
     });
-    expect(screen.getByRole("button", { name: "Place brick" })).toBeEnabled();
-    expect(screen.getByText(/studs? aligned/)).toBeVisible();
-    expect(screen.getByText("Advanced placement").closest("details")).not.toHaveAttribute("open");
+    expect(pendingPlacement().getByRole("button", { name: "Place brick" })).toBeEnabled();
+    expect(pendingPlacement().getByText(/studs? aligned/)).toBeVisible();
+    expect(
+      pendingPlacement().getByText("Advanced placement").closest("details"),
+    ).not.toHaveAttribute("open");
     expect(model()).toEqual(originalModel);
-    await user.click(screen.getByRole("button", { name: "Place brick" }));
+    await user.click(pendingPlacement().getByRole("button", { name: "Place brick" }));
     expect(model().instances).toHaveLength(2);
     expect(model().instances[1]).toMatchObject({
       colorId: "terracotta",
@@ -181,7 +186,7 @@ describe("Recovering and rotating a pending brick", () => {
     async (controls) => {
       const user = await openWorkbench();
       await user.click(screen.getByRole("button", { name: "Add Brick 2 × 4" }));
-      await user.click(screen.getByRole("button", { name: "Place brick" }));
+      await user.click(pendingPlacement().getByRole("button", { name: "Place brick" }));
       const originalModel = model();
       await user.click(screen.getByRole("button", { name: "Duplicate" }));
       const duplicated = model();
