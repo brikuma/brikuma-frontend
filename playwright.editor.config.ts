@@ -4,10 +4,7 @@ export default defineConfig({
   ...base,
   testMatch: ["editor-specialist.spec.ts", "editor-ux.spec.ts"],
   projects: [
-    {
-      name: "chromium",
-      use: { browserName: "chromium", channel: process.env.CI ? undefined : "chrome" },
-    },
+    ...(base.projects ?? []),
     { name: "firefox", use: { browserName: "firefox" } },
     { name: "webkit", use: { browserName: "webkit" } },
   ],

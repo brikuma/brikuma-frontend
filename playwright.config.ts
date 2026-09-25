@@ -26,7 +26,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { browserName: "chromium", channel: process.env.CI ? undefined : "chrome" },
+      use: {
+        browserName: "chromium",
+        channel: process.env.CI ? undefined : "chrome",
+        launchOptions: process.env.CI
+          ? { args: ["--use-gl=angle", "--use-angle=swiftshader"] }
+          : undefined,
+      },
     },
   ],
   webServer: {
