@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preview single-piece moves and rotations before applying them, preserving part identity and checked attachment with one-step undo.
+- Keep pending brick rotations aligned, recover nearby attachments after floor placement, and show current Undo/Redo feedback.
 - Resume current work from the workspace, place supported bricks with simpler previews, and inspect individual model layers.
 - Edit model-derived instruction steps, notes, ordering and saved views independently of model history.
 - Restore browser-local projects and download complete backups containing models, edited guides, briefs and reference images, with explicit save failures and multi-tab conflict protection.

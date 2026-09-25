@@ -104,6 +104,7 @@ export function SelectionInspector({
   onSelect,
   command,
   onDuplicate,
+  onReposition,
   onOpenCatalog,
   readOnly = false,
 }: {
@@ -114,6 +115,7 @@ export function SelectionInspector({
   onSelect: (id: string) => void;
   command: (command: EditCommand) => boolean;
   onDuplicate?: (id: string) => void;
+  onReposition?: (id: string, rotate?: boolean) => boolean;
   onOpenCatalog?: () => void;
   readOnly?: boolean;
 }) {
@@ -285,6 +287,16 @@ export function SelectionInspector({
             </div>
             <details className="mt-5 border-t pt-4">
               <summary className="cursor-pointer text-sm">Advanced position</summary>
+              <p className="my-2 text-xs text-muted-foreground">
+                Free draft edits can detach or overlap pieces. Use Move piece for a checked preview.
+              </p>
+              <Button
+                className="mb-2 w-full text-xs"
+                disabled={protectedPart}
+                onClick={() => command({ type: "rotate", id: part.id, quarterTurns: 1 })}
+              >
+                Rotate as draft
+              </Button>
               <h3 className="my-3 flex items-center gap-2 text-sm">
                 <Move size={15} />
                 Position{" "}
@@ -329,11 +341,24 @@ export function SelectionInspector({
                 ))}
               </div>
             </details>
+            {onReposition && (
+              <Button
+                className="mt-4 w-full"
+                disabled={protectedPart}
+                onClick={() => onReposition(part.id)}
+              >
+                <Move size={14} /> Move piece
+              </Button>
+            )}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Button
                 className="px-2 text-xs"
                 disabled={protectedPart}
-                onClick={() => command({ type: "rotate", id: part.id, quarterTurns: 1 })}
+                onClick={() =>
+                  onReposition
+                    ? onReposition(part.id, true)
+                    : command({ type: "rotate", id: part.id, quarterTurns: 1 })
+                }
               >
                 <RotateCw size={14} />
                 Rotate 90°

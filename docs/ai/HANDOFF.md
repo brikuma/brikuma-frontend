@@ -1,5 +1,23 @@
 # Frontend handoff
 
+## Authorized placement commit checkpoint — 2026-09-25
+
+The owner authorized a local frontend commit containing [FE-DEC-020](../DECISIONS.md#fe-dec-020-preserve-placement-intent-during-rotation-and-recovery) and [FE-DEC-021](../DECISIONS.md#fe-dec-021-preview-and-apply-single-piece-repositioning), including their tests and documentation. The two working-tree checkpoints below are historical development evidence for this combined candidate. Exact staged verification and independent review are recorded under ignored `artifacts/quality/`; the commit identity and actual pre-commit, commit-msg and committed-HEAD pre-push results are recorded separately in `artifacts/placement-commit/commit-manifest.json`. See the [commit acceptance record](../delivery/ACCEPTANCE.md#authorized-placement-commit-review--2026-09-25).
+
+The integration root, backend, infrastructure and dependencies remain unchanged. No push or deployment is included. Next work remains multi-piece/group repair, support-dependent movement and instruction reconciliation; this commit does not claim a finished frontend product or physical assembly validation.
+
+## Single-piece repositioning checkpoint — 2026-09-25
+
+The continued uncommitted frontend work implements [FE-DEC-021](../DECISIONS.md#fe-dec-021-preview-and-apply-single-piece-repositioning). Primary Move/Rotate and single-piece arrow shortcuts now preview the destination before Apply move; Cancel preserves the original. A pure `relocate` command preserves identity, color, group, quantity and one-step history while checking the destination against the complete model except the source. Scoped target eligibility applies to both lists and pointer picking. Rotation after single-piece inspection waits for the parent editing lock, and queued requests cancel on renderer failure or interruption. Advanced numeric and rigid multi-selection/group edits remain explicit drafts.
+
+[Acceptance](../delivery/ACCEPTANCE.md#single-piece-repositioning--2026-09-25) records **796 deterministic tests, 47 browser journeys and 10 automated accessibility checks**, a successful static build and bundle budgets, independent review and agent-operated production Chrome verification. Evidence, including initial failures and their final resolution, lives under ignored `artifacts/reposition-piece/`. The last commit remains `29568fd`; this slice and the preview-recovery slice below are uncommitted. No push, dependency, backend or other-repository edits occurred. Next: complete multi-piece/group repair and consider support-dependent movement, then meaningful instruction sections and reconciliation. Moving one piece does not guarantee that the remaining model stays supported or is physically buildable.
+
+## Placement recovery checkpoint — 2026-09-25
+
+The prior accumulated frontend changes are committed as `29568fd` (`feat(editor): improve building and preserve local projects`). Actual pre-commit, commit-msg and committed-HEAD pre-push checks passed, including 729 deterministic tests, 44 browser journeys and 10 accessibility checks; no push was performed. The owner then requested continued development. The subsequent uncommitted [FE-DEC-020](../DECISIONS.md#fe-dec-020-preserve-placement-intent-during-rotation-and-recovery) slice fixes pending brick rotation alignment and four-turn drift, recovers a nearby attachment after choosing the floor, and clears stale notices before Undo/Redo feedback. Preview changes preserve explicit Place and existing core validation.
+
+[Acceptance](../delivery/ACCEPTANCE.md#placement-rotation-and-attachment-recovery--2026-09-25) records 754 deterministic tests, 45 production browser journeys, 10 automated accessibility checks, build/bundle success and independent production review. Agent-operated Chrome confirmed rotation, overlap recovery, duplication/history and a current-model guide without opening numeric placement controls. Evidence is under ignored `artifacts/placement-recovery/`; commit evidence remains separate. Dependencies and all other repositories are unchanged. Continue the [mixed-piece repair audit](../product/UX_REVIEW.md#follow-up-backlog) with offset attachments, dragging, selected-piece rotation, removal and keyboard recovery; do not imply that pending-preview improvements solve general movement or physical assembly planning.
+
 ID: FE-AI-003. Owner: frontend. Checkpoint: 2026-09-25, local project continuity and portable backups.
 
 ## Authorized commit checkpoint — 2026-09-25

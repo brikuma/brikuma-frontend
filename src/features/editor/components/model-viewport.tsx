@@ -85,6 +85,8 @@ export function ModelViewport(props: ModelViewportProps) {
     onMove,
     onEditingLockChange,
     onCancelInteraction,
+    onReposition,
+    repositionReady = true,
   } = props;
   const [active, setActive] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -176,6 +178,7 @@ export function ModelViewport(props: ModelViewportProps) {
   const [tool, setTool] = useState<ViewportTool>("select");
   const [handledToolRequest, setHandledToolRequest] = useState(0);
   const [rotationPreview, setRotationPreview] = useState<90 | -90 | null>(null);
+  const queuedRotation = useRef<{ id: string; revision: string } | null>(null);
   const [rotationBase, setRotationBase] = useState("");
   const rotationKey = `${model.revision}:${selected}:${props.selectedIds?.join(",") ?? selected}`;
   const rotationCurrent = rotationBase === rotationKey;
@@ -219,6 +222,7 @@ export function ModelViewport(props: ModelViewportProps) {
     setFailed(true);
     setReady(false);
     setRotationPreview(null);
+    queuedRotation.current = null;
     setInspection(false);
     setExploded(false);
     setExportRequest(null);
@@ -254,7 +258,39 @@ export function ModelViewport(props: ModelViewportProps) {
     onEditingLockChange?.(editingLocked);
   }, [editingLocked, onEditingLockChange]);
   useEffect(() => {
-    const cancel = () => setRotationPreview(null);
+    const request = queuedRotation.current;
+    if (!request) return;
+    if (
+      !onReposition ||
+      placement ||
+      readOnlyMode ||
+      tool !== "rotate" ||
+      selected !== request.id ||
+      model.revision !== request.revision
+    ) {
+      queuedRotation.current = null;
+      return;
+    }
+    // Inspection's lock belongs to the parent too. Wait for its unlocked render
+    // before using the latest guarded callback, rather than guessing with a timer.
+    if (editingLocked || !repositionReady) return;
+    queuedRotation.current = null;
+    onReposition(request.id, true);
+  }, [
+    editingLocked,
+    repositionReady,
+    onReposition,
+    placement,
+    readOnlyMode,
+    tool,
+    selected,
+    model.revision,
+  ]);
+  useEffect(() => {
+    const cancel = () => {
+      setRotationPreview(null);
+      queuedRotation.current = null;
+    };
     const visibility = () => {
       if (document.hidden) cancel();
     };
@@ -278,6 +314,20 @@ export function ModelViewport(props: ModelViewportProps) {
     setPrimaryOrbit(false);
     setFitRequest((n) => n + 1);
     setZoom(1);
+  }
+  function chooseRotation() {
+    exitInspection();
+    setRotationPreview(null);
+    setTool("rotate");
+    setPrimaryOrbit(false);
+    if (props.onReposition && selected) {
+      if (inspection || props.repositionReady === false)
+        queuedRotation.current = { id: selected, revision: model.revision };
+      else {
+        queuedRotation.current = null;
+        props.onReposition(selected, true);
+      }
+    }
   }
   function beginSelectThrough() {
     if (viewTools.current) viewTools.current.open = false;
@@ -370,7 +420,8 @@ export function ModelViewport(props: ModelViewportProps) {
         )
           return;
         if (event.key === "Escape") {
-          if (rotationPreview !== null) setRotationPreview(null);
+          if (queuedRotation.current) queuedRotation.current = null;
+          else if (rotationPreview !== null) setRotationPreview(null);
           else if (placement) onCancelPlacement?.();
           else if (exportRequest) {
             setExportRequest(null);
@@ -420,7 +471,7 @@ export function ModelViewport(props: ModelViewportProps) {
           return;
         }
         if (readOnlyMode || exploded || props.section || exportRequest) return;
-        if (key === "g" && onMove) {
+        if (key === "g" && (onMove || props.onReposition)) {
           event.preventDefault();
           event.stopPropagation();
           if (placement) onCancelPlacement?.();
@@ -430,19 +481,17 @@ export function ModelViewport(props: ModelViewportProps) {
           setPrimaryOrbit(false);
           return;
         }
-        if (key === "r" && props.onRotate) {
+        if (key === "r" && (props.onRotate || props.onReposition)) {
           event.preventDefault();
           event.stopPropagation();
-          exitInspection();
-          setTool("rotate");
-          setPrimaryOrbit(false);
+          chooseRotation();
         }
       }}
     >
-      {tool === "rotate" && (!props.mode || props.mode === "build") && (
+      {tool === "rotate" && !props.onReposition && (!props.mode || props.mode === "build") && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-primary-muted px-3 py-2 text-xs">
           <span>
-            Rotate selection · {selectedPart ? "preview a quarter turn" : "select a part first"}
+            Rotate selection · {selectedPart ? "draft quarter-turn preview" : "select a part first"}
           </span>
           <button
             className="button min-h-9 px-2 text-xs"
@@ -634,7 +683,7 @@ export function ModelViewport(props: ModelViewportProps) {
                 className="size-3 shrink-0 rounded-full border border-foreground/20"
                 style={{ backgroundColor: placementColor?.hex }}
               />
-              Place {placementPart?.name ?? "part"}
+              {placement.editing ? "Reposition" : "Place"} {placementPart?.name ?? "part"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {placementColor?.name} ·{" "}
@@ -660,7 +709,7 @@ export function ModelViewport(props: ModelViewportProps) {
           </div>
           <button
             className="icon-button shrink-0"
-            aria-label="Cancel canvas placement"
+            aria-label={placement.editing ? "Cancel canvas move" : "Cancel canvas placement"}
             onClick={onCancelPlacement}
           >
             <X size={16} />
@@ -716,7 +765,7 @@ export function ModelViewport(props: ModelViewportProps) {
             >
               <MousePointer2 size={15} /> Select
             </button>
-            {onMove && (
+            {(onMove || props.onReposition) && (
               <button
                 className={`button min-h-9 px-2.5 text-xs ${tool === "move" && !placement ? "border-primary/30 bg-primary-muted text-primary" : "border-transparent"}`}
                 aria-label="Move tool"
@@ -729,7 +778,9 @@ export function ModelViewport(props: ModelViewportProps) {
                 title={
                   exploded
                     ? "Close exploded view to move parts"
-                    : "Drag a part on the horizontal grid"
+                    : props.onReposition
+                      ? "Pick a piece, preview its new position, then Apply move"
+                      : "Drag the selection as a draft on the horizontal grid"
                 }
                 onClick={() => {
                   onCancelPlacement?.();
@@ -741,21 +792,20 @@ export function ModelViewport(props: ModelViewportProps) {
                 <Move size={15} /> Move
               </button>
             )}
-            {props.onRotate && (
+            {(props.onRotate || props.onReposition) && (
               <button
-                className={`button min-h-9 px-2.5 text-xs ${tool === "rotate" ? "bg-primary-muted text-primary" : "border-transparent"}`}
+                className={`button min-h-9 px-2.5 text-xs ${tool === "rotate" && !placement ? "bg-primary-muted text-primary" : "border-transparent"}`}
                 aria-label="Rotate tool"
-                aria-pressed={tool === "rotate"}
+                aria-pressed={tool === "rotate" && !placement}
                 disabled={
                   exploded ||
+                  Boolean(placement) ||
                   Boolean(props.section) ||
                   (props.mode !== undefined && props.mode !== "build")
                 }
                 onClick={() => {
                   onCancelPlacement?.();
-                  exitInspection();
-                  setTool("rotate");
-                  setPrimaryOrbit(false);
+                  chooseRotation();
                 }}
               >
                 <RotateCcw size={15} /> Rotate
@@ -1036,7 +1086,10 @@ export function ModelViewport(props: ModelViewportProps) {
               onExport={exportComplete}
               presentationPreset={props.mode === "present" ? presentationPreset : "neutral"}
               rotationPreview={
-                tool === "rotate" && rotationCurrent && (!props.mode || props.mode === "build")
+                tool === "rotate" &&
+                !props.onReposition &&
+                rotationCurrent &&
+                (!props.mode || props.mode === "build")
                   ? rotationPreview
                   : null
               }
@@ -1305,10 +1358,14 @@ export function ModelViewport(props: ModelViewportProps) {
                     ? "One layer at a time · Next layer moves downward · Reassemble restores the model"
                     : "Sections stay together · Reassemble restores the model"
                   : tool === "move"
-                    ? "Drag a part to move it · snaps every 0.4 cm · Escape cancels"
-                    : primaryOrbit
-                      ? "Drag to orbit · scroll to zoom · choose Select to build"
-                      : "Click a part to select it · choose Move to reposition · scroll to zoom"
+                    ? props.onReposition
+                      ? "Pick a piece, preview its position, then Apply move · Escape cancels"
+                      : "Drag the selection as a draft · snaps every 0.4 cm · Escape cancels"
+                    : tool === "rotate" && props.onReposition
+                      ? "Pick a piece to preview a quarter turn · Apply move keeps it"
+                      : primaryOrbit
+                        ? "Drag to orbit · scroll to zoom · choose Select to build"
+                        : "Click a part to select it · choose Move to reposition · scroll to zoom"
             : "Local model viewer"}
         </span>
         <span className="hidden 2xl:inline">{hovered ? "Part under pointer" : ""}</span>

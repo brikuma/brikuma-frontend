@@ -166,7 +166,7 @@ test("FE-019: mobile starts as a deliberate viewer with accessible inspector", a
   await expect(page.getByRole("button", { name: "Inspector", exact: true })).toBeFocused();
 });
 
-test("Studio: canvas dragging commits once and pointer cancellation leaves the model unchanged", async ({
+test("Studio: draft selection dragging commits once and pointer cancellation leaves the model unchanged", async ({
   page,
 }) => {
   await page.goto("/editor/?project=blank");
@@ -178,6 +178,8 @@ test("Studio: canvas dragging commits once and pointer cancellation leaves the m
   await expect(page.getByRole("option", { name: "Right view", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await openDetails(page, "Advanced position");
+  // Explicit selection drafting retains rigid drag commands; default single-piece Move uses a preview.
+  await page.getByRole("checkbox", { name: "Select multiple parts", exact: true }).check();
   await page.getByRole("combobox", { name: "Camera view", exact: true }).selectOption("right");
   await page.getByRole("button", { name: "Move tool", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Camera view", exact: true })).toHaveValue("iso");
@@ -326,6 +328,19 @@ test("Studio: brick inspection exposes the underside without changing the assemb
     page.getByRole("button", { name: "Inspect selected brick", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator("[data-count]")).toHaveAttribute("data-count", "1");
+  const beforeRotation = await page.locator(".workbench-shell").getAttribute("data-revision");
+  await page.getByRole("button", { name: "Inspect selected brick", exact: true }).click();
+  await page
+    .locator("summary")
+    .filter({ hasText: /^View tools$/ })
+    .click();
+  await page.getByRole("button", { name: "Rotate tool", exact: true }).click();
+  const movePreview = page.getByRole("region", { name: "Reposition piece", exact: true });
+  await expect(movePreview.getByText("Turn: 90°", { exact: true })).toBeVisible();
+  await expect(movePreview.getByRole("button", { name: "Apply move", exact: true })).toBeEnabled();
+  await expect(page.getByText("Return to assembled Build before moving a piece.")).toHaveCount(0);
+  await expect(page.locator(".workbench-shell")).toHaveAttribute("data-revision", beforeRotation!);
+  await movePreview.getByRole("button", { name: "Cancel move", exact: true }).click();
   await page.getByRole("button", { name: "Undo local edit", exact: true }).click();
   await expect(page.locator("[data-count]")).toHaveAttribute("data-count", "0");
 });

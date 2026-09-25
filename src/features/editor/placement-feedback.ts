@@ -1,6 +1,7 @@
 import {
   findStudContacts,
   isValidTransform,
+  isGroupProtected,
   validatePlacement,
   type Model,
   type PartDefinition,
@@ -8,6 +9,7 @@ import {
 } from "@/core/model/public";
 import { editPolicy } from "@/fixtures/catalog";
 import type { PlacementPreview } from "./viewport-types";
+import { getPlacementModel } from "./placement-model";
 
 export interface PlacementFeedback {
   readonly allowed: boolean;
@@ -22,13 +24,26 @@ export function placementFeedback(
   definitions: readonly PartDefinition[],
   placement: PlacementPreview,
 ): PlacementFeedback {
+  if (placement.editing) {
+    const source = model.instances.find((part) => part.id === placement.editing?.instanceId);
+    const message =
+      placement.editing.baseRevision !== model.revision
+        ? "The model changed. Cancel this move and select the piece again."
+        : !source
+          ? "This piece is no longer in the model. Cancel this move."
+          : isGroupProtected(model, source.groupId)
+            ? "This piece is protected. Cancel the move and unlock its assembly first."
+            : "";
+    if (message) return { allowed: false, kind: "blocked", message, contacts: [] };
+  }
+  const placementModel = getPlacementModel(model, placement);
   const definition = definitions.find((item) => item.id === placement.partId);
   if (!definition)
     return { allowed: false, kind: "blocked", message: "Choose a part first", contacts: [] };
   const mode =
     placement.target === "free" ? "free" : placement.target === "ground" ? "grid" : "connect";
   const result = validatePlacement(
-    model,
+    placementModel,
     definitions,
     definition,
     placement.transform,
@@ -54,7 +69,9 @@ export function placementFeedback(
       contacts: [],
     };
   const contacts =
-    mode === "connect" ? findStudContacts(model, definitions, definition, placement.transform) : [];
+    mode === "connect"
+      ? findStudContacts(placementModel, definitions, definition, placement.transform)
+      : [];
   return {
     allowed: true,
     kind: mode === "connect" ? "connected" : mode === "grid" ? "ground" : "free",

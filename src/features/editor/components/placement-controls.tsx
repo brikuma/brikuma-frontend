@@ -16,21 +16,23 @@ import {
   worldStudSites,
   type GridTransform,
   type Model,
-  type QuarterTurn,
 } from "@/core/model/public";
 import { partDefinitions, colors, editPolicy } from "@/fixtures/catalog";
 import { PartDimensions } from "./part-dimensions";
 import type { PlacementPreview } from "../viewport-types";
 import { placementFeedback } from "../placement-feedback";
+import { getPlacementModel } from "../placement-model";
 
 export function PlacementControls({
   placement,
   model,
   hiddenIds,
+  eligibleTargetIds,
   repeat,
   awaitingNextPosition = false,
   onRepeat,
   onChange,
+  onRotate,
   onPlace,
   onCancel,
   onPolicy,
@@ -39,10 +41,12 @@ export function PlacementControls({
   placement: PlacementPreview;
   model: Model;
   hiddenIds: readonly string[];
+  eligibleTargetIds?: readonly string[];
   repeat: boolean;
   awaitingNextPosition?: boolean;
   onRepeat: (value: boolean) => void;
   onChange: (value: GridTransform) => void;
+  onRotate: () => void;
   onPlace: (value: GridTransform) => boolean;
   onCancel: () => void;
   onPolicy: (value: "surface" | "ground" | "free") => void;
@@ -69,18 +73,29 @@ export function PlacementControls({
   }
   const definition = partDefinitions.find((part) => part.id === placement.partId)!;
   const connectors = getPartConnections(definition);
-  const diagnostic = diagnosePlacement(model, partDefinitions, definition, placement.transform);
+  const placementModel = getPlacementModel(model, placement);
+  const editing = Boolean(placement.editing);
+  const diagnostic = diagnosePlacement(
+    placementModel,
+    partDefinitions,
+    definition,
+    placement.transform,
+  );
   const candidates =
     placement.target === "surface"
       ? getPlacementCandidates({
-          model,
+          model: placementModel,
           definitions: partDefinitions,
           definition,
           transform: placement.transform,
           orientationPolicy: orientation,
           sourceConnectorIndex: source,
-          eligibleTargetIds: model.instances
-            .filter((part) => !hiddenIds.includes(part.id))
+          eligibleTargetIds: placementModel.instances
+            .filter((part) =>
+              eligibleTargetIds
+                ? eligibleTargetIds.includes(part.id)
+                : !hiddenIds.includes(part.id),
+            )
             .map((part) => part.id),
           previousCandidateId: active,
           limit: 6,
@@ -116,19 +131,33 @@ export function PlacementControls({
   return (
     <section
       className="space-y-3 rounded-lg border border-primary/40 bg-primary-muted/30 p-3"
-      aria-label="Pending brick placement"
+      aria-label={editing ? "Reposition piece" : "Pending brick placement"}
     >
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs text-muted-foreground">
-            {awaitingNextPosition ? "Ready for the next brick" : "Choose where to place it"}
+            {editing
+              ? "Move this piece"
+              : awaitingNextPosition
+                ? "Ready for the next brick"
+                : "Choose where to place it"}
           </p>
           <h2 className="mt-1 text-base">{definition.name}</h2>
         </div>
-        <button className="icon-button" aria-label="Cancel placement" onClick={onCancel}>
+        <button
+          className="icon-button"
+          aria-label={editing ? "Cancel move" : "Cancel placement"}
+          onClick={onCancel}
+        >
           <X size={16} />
         </button>
       </div>
+      {editing && (
+        <p className="text-xs text-muted-foreground">
+          The original stays unchanged until you apply. Only this piece moves; check pieces resting
+          on it.
+        </p>
+      )}
       <PartDimensions
         part={definition}
         rotation={placement.transform.rotation}
@@ -144,7 +173,7 @@ export function PlacementControls({
       <div className="grid grid-cols-2 gap-2" aria-label="Where to place the brick">
         <Button
           className="px-2 text-xs"
-          disabled={!connectable || !model.instances.length}
+          disabled={!connectable || !placementModel.instances.length}
           aria-pressed={placement.target === "surface"}
           onClick={() => onPolicy("surface")}
         >
@@ -167,35 +196,32 @@ export function PlacementControls({
         {!connectable
           ? "Visual detail only: this piece has no supported attachment."
           : placement.target === "surface"
-            ? "Point to the model to snap onto it. Place brick keeps the position shown."
+            ? `Point to the model to snap onto it. ${editing ? "Apply move" : "Place brick"} keeps the position shown.`
             : "Point to the floor to choose a position. The preview shows where the brick will go."}
       </p>
-      <label className="block text-xs">
-        Color
-        <select
-          aria-label="Pending brick color"
-          className="field mt-1"
-          value={placement.colorId}
-          onChange={(e) => onColor(e.target.value)}
-        >
-          {colors.map((color) => (
-            <option key={color.id} value={color.id}>
-              {color.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {!editing && (
+        <label className="block text-xs">
+          Color
+          <select
+            aria-label="Pending brick color"
+            className="field mt-1"
+            value={placement.colorId}
+            onChange={(e) => onColor(e.target.value)}
+          >
+            {colors.map((color) => (
+              <option key={color.id} value={color.id}>
+                {color.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           className="button"
           aria-label="Rotate pending brick"
-          onClick={() =>
-            onChange({
-              ...placement.transform,
-              rotation: ((placement.transform.rotation + 90) % 360) as QuarterTurn,
-            })
-          }
+          onClick={onRotate}
         >
           <RotateCw size={16} /> Rotate
         </button>
@@ -212,8 +238,8 @@ export function PlacementControls({
           ) : (
             <>
               <p className="text-xs text-muted-foreground">
-                Point to a studded surface in the model, or choose a target below. Then use Place
-                brick to keep the previewed position.
+                Point to a studded surface in the model, or choose a target below. Then use{" "}
+                {editing ? "Apply move" : "Place brick"} to keep the previewed position.
               </p>
               {candidates.length === 0 && (
                 <p className="text-xs">
@@ -231,7 +257,7 @@ export function PlacementControls({
                     target.transform,
                   )[candidate.targetConnectorIndex];
                   const contacts = findStudContacts(
-                    model,
+                    placementModel,
                     partDefinitions,
                     definition,
                     candidate.transform,
@@ -405,7 +431,7 @@ export function PlacementControls({
                 ? "Grid spacing: 0.8 cm horizontally and 0.32 cm vertically, aligned to the brick footprint."
                 : placement.target === "free"
                   ? "Free draft; no connected-placement claim."
-                  : "Explicit connector alignment; revalidated on Place."}
+                  : "Explicit connector alignment; revalidated when applied."}
             </p>
             <details className="my-3 border-y py-2 text-xs">
               <summary className="cursor-pointer">Geometry and physical limits</summary>
@@ -434,10 +460,12 @@ export function PlacementControls({
             </details>
           </div>
         </details>
-        <label className="my-3 flex min-h-10 items-center gap-2 text-sm">
-          <input type="checkbox" checked={repeat} onChange={(e) => onRepeat(e.target.checked)} />
-          Repeat placement
-        </label>
+        {!editing && (
+          <label className="my-3 flex min-h-10 items-center gap-2 text-sm">
+            <input type="checkbox" checked={repeat} onChange={(e) => onRepeat(e.target.checked)} />
+            Repeat placement
+          </label>
+        )}
         <div className="sticky bottom-0 border-t bg-surface py-2">
           <p id={feedbackId} aria-live="polite" className="mb-2 text-xs">
             {message}
@@ -449,12 +477,13 @@ export function PlacementControls({
             disabled={!canPlace}
             aria-describedby={feedbackId}
           >
-            Place brick
+            {editing ? "Apply move" : "Place brick"}
           </Button>
         </div>
       </form>
       <p className="text-xs text-muted-foreground">
-        Dimensions use the nominal brick pitch and are approximate. Escape cancels.
+        Dimensions are approximate. In the workspace, arrow keys adjust the preview; Enter applies
+        and Escape cancels.
       </p>
     </section>
   );

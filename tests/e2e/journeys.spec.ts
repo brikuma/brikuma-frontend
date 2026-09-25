@@ -175,7 +175,7 @@ test("Studio: precise placement, rotation and duplication remain reversible acro
   await page.getByRole("button", { name: "Update preview", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await openDetails(page, "Advanced position");
-  await page.getByRole("button", { name: "Rotate 90°", exact: true }).click();
+  await page.getByRole("button", { name: "Rotate as draft", exact: true }).click();
   await expect(page.getByText("Rotation 90°", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Duplicate", exact: true }).click();
   await expect(page.getByTestId("piece-count")).toHaveText("2");

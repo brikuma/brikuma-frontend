@@ -427,6 +427,8 @@ test("EDT-047: an actual rendered PNG encoding failure restores the editor", asy
     .getByRole("button", { name: "Build", exact: true })
     .click();
   await page.getByRole("button", { name: "Rotate 90°", exact: true }).click();
+  expect(await revision(page)).toBe(before);
+  await page.getByRole("button", { name: "Apply move", exact: true }).click();
   expect(await revision(page)).not.toBe(before);
   await expect(page.locator("canvas")).toHaveAttribute("data-part-count", "1");
 });

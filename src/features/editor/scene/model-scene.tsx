@@ -32,6 +32,7 @@ import { SceneOutput } from "./scene-output";
 import { instancePartId, partIsPresented } from "./picking";
 import { snapPlacementCenter } from "../placement-grid";
 import { placementFeedback } from "../placement-feedback";
+import { getPlacementModel } from "../placement-model";
 import { createAssemblyView, type AssemblyViewMode } from "../assembly-view";
 import { ConnectionMarkers } from "./connection-markers";
 import {
@@ -109,9 +110,11 @@ function SceneContents(props: SceneProps) {
   const spacePan = useRef(false);
   const suppressClick = useRef(false);
   const cancelPlacement = useRef(props.onCancelPlacement);
+  const editingPlacement = useRef(placement?.editing);
   useEffect(() => {
     cancelPlacement.current = props.onCancelPlacement;
-  }, [props.onCancelPlacement]);
+    editingPlacement.current = placement?.editing;
+  }, [props.onCancelPlacement, placement?.editing]);
   const [drag, setDrag] = useState<DragPreview | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -166,6 +169,10 @@ function SceneContents(props: SceneProps) {
       ),
     }),
     [focusedLayer, layerView, hidden, model, props.focusIds, props.presentationIds],
+  );
+  const renderedModel = useMemo(
+    () => getPlacementModel(presentedModel, placement),
+    [presentedModel, placement],
   );
   const focusedOffsets = useMemo(
     () =>
@@ -248,7 +255,10 @@ function SceneContents(props: SceneProps) {
         canvas.releasePointerCapture(current.pointerId);
       invalidate();
     }
-    const pointerCancel = (event: PointerEvent) => cancel(event.pointerId);
+    const pointerCancel = (event: PointerEvent) => {
+      cancel(event.pointerId);
+      if (editingPlacement.current) cancelPlacement.current?.();
+    };
     const blur = () => {
       cancel();
       spacePan.current = false;
@@ -355,6 +365,21 @@ function SceneContents(props: SceneProps) {
   }
   function placementAt(event: ThreeEvent<PointerEvent | MouseEvent>, surface?: PartInstance) {
     if (!placement) return null;
+    if (surface?.id === placement.editing?.instanceId) return null;
+    if (
+      surface &&
+      placement.target !== "ground" &&
+      placement.target !== "free" &&
+      props.placementTargetIds &&
+      !props.placementTargetIds.includes(surface.id)
+    )
+      return null;
+    if (
+      placement.editing &&
+      (placement.editing.baseRevision !== model.revision ||
+        !model.instances.some((part) => part.id === placement.editing?.instanceId))
+    )
+      return null;
     if (spacePan.current || ("buttons" in event && event.buttons > 1)) return null;
     const definition = partDefinitions.find((entry) => entry.id === placement.partId);
     if (!definition) return null;
@@ -404,6 +429,9 @@ function SceneContents(props: SceneProps) {
     }
     if (tool !== "move" || exploded || props.section) return;
     event.stopPropagation();
+    // A single-piece move begins with a click, then uses the normal placement preview.
+    // The initiating pointer gesture must not also run the unrestricted drag command.
+    if (props.onReposition) return;
     if (kind === "down" && event.button === 0) {
       if (dragSession.current) return;
       suppressClick.current = false;
@@ -511,7 +539,8 @@ function SceneContents(props: SceneProps) {
         const id: unknown = Array.isArray(mapping)
           ? instancePartId(mapping, hit.instanceId, hit.object.userData.instancesPerPart ?? 1)
           : undefined;
-        if (typeof id === "string" && !ids.includes(id)) ids.push(id);
+        if (typeof id === "string" && id !== placement?.editing?.instanceId && !ids.includes(id))
+          ids.push(id);
       }
       props.onPickCandidates?.(ids);
       return;
@@ -523,6 +552,9 @@ function SceneContents(props: SceneProps) {
         if (placementFeedback(model, partDefinitions, { ...placement, transform }).allowed)
           onPlace?.(transform);
       }
+    } else if (part && props.onReposition && (tool === "move" || tool === "rotate")) {
+      if (!exploded && !props.section && (!props.mode || props.mode === "build"))
+        props.onReposition(part.id, tool === "rotate");
     } else if (part && tool !== "move") onSelect(part.id, event.shiftKey || props.multiSelect);
     else if (!part && !dragSession.current) props.onClearSelection?.();
   }
@@ -671,7 +703,7 @@ function SceneContents(props: SceneProps) {
       )}
       {partDefinitions.flatMap((definition) =>
         [false, true].map((muted) => {
-          const parts = presentedModel.instances.filter(
+          const parts = renderedModel.instances.filter(
             (part) =>
               part.partId === definition.id && Boolean(props.mutedIds?.includes(part.id)) === muted,
           );

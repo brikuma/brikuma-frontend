@@ -54,6 +54,12 @@ Next.js composition → feature/session presentation → core public API → app
 
 Rules and test coverage correspond to FE-005, FE-006, FE-008, FE-009, FE-012, FE-013, and FE-022. [Unit tests](../../tests/unit/model.test.ts) exercise behavior, rejected-command non-mutation, bounded history, compatible variants, full fixture validity, BOM totals, and the final instruction step's instance coverage. An import graph can enforce dependencies, but cannot prove semantic rule ownership; review remains required.
 
+## Single-piece relocation
+
+`applyCommand` accepts `{ type: "relocate", id, transform, placement, baseRevision }`, with `placement` set to `connect`, `grid` or `free`. It applies that policy to one existing instance and resolves its definition, color and group from the model rather than accepting a replacement instance. Inherited protection, stale revision, invalid destination and ordinary aggregate failures reject without mutation. A valid changed destination updates the original instance in one history entry and geometry revision, preserving logical identity, group membership and BOM quantities. An unchanged transform is a no-op.
+
+Destination validation excludes only the source instance from collision and contact queries. All other canonical instances remain obstacles or eligible physical contacts, independent of presentation visibility. The canonical source is never removed during preview, so cancelling requires no compensating edit and creates no history. Connect/Grid use the existing bounded placement rules; Free remains an explicit draft policy. The operation does not move dependent pieces or certify the remaining assembly's support. [Relocation tests](../../tests/unit/relocate.test.ts) cover command rejection, identity and history; [modeling](../editor/MODELING.md#single-piece-relocation) and [experience](../editor/EXPERIENCE.md#the-building-loop) own the surrounding frontend contract.
+
 ## Sources
 
 The self-contained user execution brief is the executable requirement source. DDD terminology follows the provided primary references: [Domain Language reference](https://www.domainlanguage.com/ddd/reference/), [bounded contexts](https://martinfowler.com/bliki/BoundedContext.html), and the [dependency rule](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html). Folder names and this small functional implementation are project decisions, not requirements imposed by those authors.

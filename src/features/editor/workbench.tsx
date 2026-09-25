@@ -54,15 +54,20 @@ import {
   studsToCentimeters,
   centimetersToStuds,
   snapGridTransform,
+  hasSupportedDiagnosticGeometry,
+  getPartConnections,
+  validatePlacement,
   getGroupInstanceIds,
   isGroupProtected,
   type EditCommand,
   type GridTransform,
   type Model,
-  type QuarterTurn,
 } from "@/core/model/public";
 import type { PlacementPreview, ViewportTool } from "./viewport-types";
 import { createInitialPlacement } from "./initial-placement";
+import { getPlacementModel } from "./placement-model";
+import { placementFeedback } from "./placement-feedback";
+import { rotatePlacementPreview, suggestAttachmentPreview } from "./placement-intent";
 import type { SceneFixture } from "@/fixtures/scene-types";
 import type { EditorFixtureId } from "@/fixtures/editor";
 
@@ -117,6 +122,12 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(project.focus !== "roof");
   const [pending, setPending] = useState<PlacementPreview | null>(null);
+  const rotationOrigin = useRef<{
+    partId: string;
+    target: PlacementPreview["target"];
+    transform: GridTransform;
+    origin: GridTransform;
+  } | null>(null);
   const [repeat, setRepeat] = useState(false);
   const [awaitingNextPosition, setAwaitingNextPosition] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -203,6 +214,10 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       setNotice("Return to assembled Build to edit the model.");
       return false;
     }
+    if (pending && value.type !== "place" && value.type !== "relocate") {
+      setNotice("Apply or cancel the preview before editing another piece.");
+      return false;
+    }
     setNotice("");
     return project.command(value);
   }
@@ -237,7 +252,12 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
   function cancelPlacement() {
     setPending(null);
     setAwaitingNextPosition(false);
-    if (pending) setNotice("Placement cancelled; model unchanged.");
+    if (pending)
+      setNotice(
+        pending.editing
+          ? "Move cancelled; model unchanged."
+          : "Placement cancelled; model unchanged.",
+      );
   }
   function changePlacement(transform: GridTransform) {
     if (
@@ -251,6 +271,144 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     setAwaitingNextPosition(false);
     setNotice("");
   }
+  function placementTargetIds(excludedId = pending?.editing?.instanceId) {
+    const scopeIds = validScope ? new Set(getGroupInstanceIds(model, validScope)) : null;
+    return model.instances
+      .filter(
+        (part) =>
+          part.id !== excludedId &&
+          (!scopeIds || scopeIds.has(part.id)) &&
+          (!focusIds?.length || focusIds.includes(part.id)) &&
+          (focusIds?.includes(part.id) || !hiddenIds.includes(part.id)),
+      )
+      .map((part) => part.id);
+  }
+  function rotatePending() {
+    if (!pending) return;
+    const definition = partDefinitions.find((part) => part.id === pending.partId);
+    if (!definition) return;
+    const previous = rotationOrigin.current;
+    const origin =
+      previous?.partId === pending.partId &&
+      previous.target === pending.target &&
+      previous.transform === pending.transform
+        ? previous.origin
+        : pending.transform;
+    const next = rotatePlacementPreview({
+      model: getPlacementModel(model, pending),
+      definitions: partDefinitions,
+      definition,
+      placement: pending,
+      origin,
+      eligibleTargetIds: placementTargetIds(),
+      bounds: editPolicy.bounds,
+    });
+    rotationOrigin.current = {
+      partId: pending.partId,
+      target: pending.target,
+      transform: next.transform,
+      origin,
+    };
+    setPending(next);
+    setAwaitingNextPosition(false);
+    setNotice("");
+  }
+  function changePlacementPolicy(target: "surface" | "ground" | "free") {
+    if (!pending) return;
+    const definition = partDefinitions.find((part) => part.id === pending.partId);
+    if (!definition) return;
+    const next =
+      target === "surface"
+        ? suggestAttachmentPreview({
+            model: getPlacementModel(model, pending),
+            definitions: partDefinitions,
+            definition,
+            placement: pending,
+            eligibleTargetIds: placementTargetIds(),
+            preferredTargetIds: selectionIds,
+            bounds: editPolicy.bounds,
+          })
+        : {
+            ...pending,
+            target,
+            transform:
+              target === "ground"
+                ? snapGridTransform(definition, pending.transform)
+                : pending.transform,
+          };
+    changePlacement(next.transform);
+    setPending(next);
+    setNotice("");
+  }
+  function reposition(partId: string, rotate = false) {
+    if (readOnly) {
+      setNotice("Return to assembled Build before moving a piece.");
+      return false;
+    }
+    const part = model.instances.find((part) => part.id === partId);
+    const definition = partDefinitions.find((definition) => definition.id === part?.partId);
+    if (!part || !definition) return false;
+    if (isGroupProtected(model, part.groupId)) {
+      setNotice("This piece is protected. Unlock its assembly before moving it.");
+      return false;
+    }
+    if (validScope && !getGroupInstanceIds(model, validScope).includes(partId)) {
+      setNotice("Outside the active assembly. Exit group to move this part.");
+      return false;
+    }
+    let preview: PlacementPreview = {
+      partId: part.partId,
+      colorId: part.colorId,
+      transform: { ...part.transform },
+      editing: { instanceId: part.id, baseRevision: model.revision },
+    };
+    const availableModel = getPlacementModel(model, preview);
+    const connectable =
+      hasSupportedDiagnosticGeometry(definition) &&
+      getPartConnections(definition).receivers.length > 0;
+    preview.target = !connectable
+      ? "free"
+      : validatePlacement(
+            availableModel,
+            partDefinitions,
+            definition,
+            part.transform,
+            "connect",
+            editPolicy.bounds,
+          ).ok
+        ? "surface"
+        : Math.abs(part.transform.y - definition.height / 2) < 0.000001
+          ? "ground"
+          : "surface";
+    const origin = preview.transform;
+    if (rotate)
+      preview = rotatePlacementPreview({
+        model: availableModel,
+        definitions: partDefinitions,
+        definition,
+        placement: preview,
+        origin,
+        eligibleTargetIds: placementTargetIds(part.id),
+        bounds: editPolicy.bounds,
+      });
+    rotationOrigin.current = {
+      partId: preview.partId,
+      target: preview.target,
+      transform: preview.transform,
+      origin,
+    };
+    setPending(preview);
+    setAwaitingNextPosition(false);
+    setSelected([part.id]);
+    setSelectedGroup(null);
+    setTab("Parts");
+    setLeftCollapsed(false);
+    if (width < 1280) setSheet(width < 1024 ? "left" : null);
+    setNotice(
+      "Move preview only. Apply move keeps the new position; Cancel restores the original.",
+    );
+    return true;
+  }
   function choosePart(partId: string, colorId: string) {
     if (readOnly) {
       setNotice("Return to assembled Build before choosing a part.");
@@ -261,7 +419,6 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     setNotice("");
     setTab("Parts");
     setAwaitingNextPosition(false);
-    const scopeIds = validScope ? new Set(getGroupInstanceIds(model, validScope)) : null;
     setPending(
       createInitialPlacement({
         model,
@@ -269,14 +426,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
         definition,
         colorId,
         selectedIds: selectionIds,
-        visibleIds: model.instances
-          .filter(
-            (part) =>
-              (!scopeIds || scopeIds.has(part.id)) &&
-              (!focusIds?.length || focusIds.includes(part.id)) &&
-              (focusIds?.includes(part.id) || !hiddenIds.includes(part.id)),
-          )
-          .map((part) => part.id),
+        visibleIds: placementTargetIds(""),
         bounds: editPolicy.bounds,
       }),
     );
@@ -293,10 +443,44 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       return;
     }
     setPending(null);
+    setNotice("");
     history(direction);
   }
   function place(transform: GridTransform) {
     if (!pending) return false;
+    if (pending.editing) {
+      const feedback = placementFeedback(model, partDefinitions, { ...pending, transform });
+      if (!feedback.allowed) {
+        setNotice(feedback.message);
+        return false;
+      }
+      const source = model.instances.find((part) => part.id === pending.editing?.instanceId);
+      if (
+        source &&
+        (["x", "y", "z", "rotation"] as const).every(
+          (key) => source.transform[key] === transform[key],
+        )
+      ) {
+        setPending(null);
+        setNotice("Position unchanged; no edit was added.");
+        return true;
+      }
+      const ok = command({
+        type: "relocate",
+        id: pending.editing.instanceId,
+        transform,
+        placement:
+          pending.target === "surface" ? "connect" : pending.target === "free" ? "free" : "grid",
+        baseRevision: pending.editing.baseRevision,
+      });
+      if (ok) {
+        setSelected([pending.editing.instanceId]);
+        setPending(null);
+        setNotice("Piece moved. Undo restores its previous position.");
+        if (sheet) closePanel();
+      }
+      return ok;
+    }
     if (
       awaitingNextPosition &&
       (Object.keys(transform) as (keyof GridTransform)[]).every(
@@ -530,13 +714,37 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     }
     if (key === "r" && pending) {
       event.preventDefault();
-      changePlacement({
-        ...pending.transform,
-        rotation: ((pending.transform.rotation + 90) % 360) as QuarterTurn,
-      });
+      rotatePending();
       return;
     }
-    if (!selection || pending) return;
+    if (pending) {
+      if (event.target instanceof HTMLElement && event.target.closest("button,a,summary")) return;
+      const previewMoves: Record<string, readonly [number, number]> = {
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1],
+      };
+      const delta = previewMoves[event.key];
+      if (delta) {
+        event.preventDefault();
+        changePlacement({
+          ...pending.transform,
+          x: pending.transform.x + delta[0],
+          z: pending.transform.z + delta[1],
+        });
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        place(pending.transform);
+      }
+      return;
+    }
+    if (!selection) return;
+    if (key === "r" && selectionIds.length === 1 && !multiSelect && !groupMode) {
+      event.preventDefault();
+      reposition(selection, true);
+      return;
+    }
     if (key === "d" && event.shiftKey) {
       event.preventDefault();
       duplicate(selectionIds);
@@ -559,7 +767,28 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
     };
     if (moves[event.key]) {
       event.preventDefault();
-      command({ type: "translate-selection", ids: selectionIds, delta: moves[event.key] });
+      if (
+        event.key.startsWith("Arrow") &&
+        selectionIds.length === 1 &&
+        !multiSelect &&
+        !groupMode
+      ) {
+        if (reposition(selection)) {
+          const delta = moves[event.key];
+          setPending((current) =>
+            current
+              ? {
+                  ...current,
+                  transform: {
+                    ...current.transform,
+                    x: current.transform.x + Math.sign(delta.x),
+                    z: current.transform.z + Math.sign(delta.z),
+                  },
+                }
+              : null,
+          );
+        }
+      } else command({ type: "translate-selection", ids: selectionIds, delta: moves[event.key] });
     }
   }
   function closePanel() {
@@ -608,40 +837,23 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
       <div className="space-y-4 p-3">
         {pending && (
           <PlacementControls
-            key={pending.partId}
+            key={`${pending.editing?.instanceId ?? "new"}-${pending.partId}`}
             placement={pending}
             model={model}
+            eligibleTargetIds={placementTargetIds()}
             hiddenIds={hiddenIds}
             repeat={repeat}
             awaitingNextPosition={awaitingNextPosition}
             onRepeat={setRepeat}
             onChange={changePlacement}
+            onRotate={rotatePending}
             onPlace={place}
             onCancel={cancelPlacement}
             onColor={(colorId) => {
               setCatalogColor(colorId);
               setPending((current) => (current ? { ...current, colorId } : null));
             }}
-            onPolicy={(target) => {
-              setNotice("");
-              const transform =
-                target === "ground"
-                  ? snapGridTransform(
-                      partDefinitions.find((part) => part.id === pending.partId)!,
-                      pending.transform,
-                    )
-                  : pending.transform;
-              changePlacement(transform);
-              setPending((current) =>
-                current
-                  ? {
-                      ...current,
-                      target,
-                      transform,
-                    }
-                  : null,
-              );
-            }}
+            onPolicy={changePlacementPolicy}
           />
         )}
         {tab === "Building templates" ? (
@@ -791,7 +1003,7 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               groupId={validSelectedGroup}
               onGroup={setScope}
               command={command}
-              readOnly={readOnly}
+              readOnly={readOnly || Boolean(pending)}
               onFocus={() => focus(selectionIds)}
               onDuplicate={() => duplicate(selectionIds)}
               onHide={() => {
@@ -811,14 +1023,15 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
               onSelect={select}
               command={command}
               onDuplicate={(id) => duplicate([id])}
-              readOnly={readOnly}
+              onReposition={reposition}
+              readOnly={readOnly || Boolean(pending)}
               onOpenCatalog={() => {
                 setTab("Parts");
                 setLeftCollapsed(false);
                 if (!window.matchMedia("(min-width: 1024px)").matches) setSheet("left");
               }}
             />
-            {selectionIds.length === 1 && !readOnly && (
+            {selectionIds.length === 1 && !readOnly && !pending && (
               <EditorReplacement
                 model={model}
                 policy={editPolicy}
@@ -1214,10 +1427,15 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
             mutedIds={steps?.mutedIds}
             placement={pending}
             awaitingNextPosition={awaitingNextPosition}
+            placementTargetIds={placementTargetIds()}
+            repositionReady={!readOnly}
             onPlacementChange={changePlacement}
             onPlace={place}
             onCancelPlacement={cancelPlacement}
             onCancelInteraction={() => setPending(null)}
+            onReposition={
+              !multiSelect && !groupMode && selectionIds.length <= 1 ? reposition : undefined
+            }
             onRotate={(partId, degrees) =>
               command({
                 type: "rotate-selection",
@@ -1309,7 +1527,12 @@ function EditorWorkbench({ project }: { project: ReturnType<typeof useProject> }
           Browser-local project · download a separate backup
         </p>
         <p role="status" aria-live="polite">
-          {notice || message || (pending ? "Preview only · Place commits once" : "Ready to build")}
+          {notice ||
+            (pending
+              ? pending.editing
+                ? "Move preview only · Apply move keeps this position"
+                : "Preview only · Place commits once"
+              : message || "Ready to build")}
         </p>
       </div>
       <Dialog

@@ -259,23 +259,27 @@ describe("Manual building through accessible controls", () => {
     expect(screen.getByRole("button", { name: "Connect" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it.each(partDefinitions)("places, rotates and duplicates $name", async (definition) => {
-    const user = userEvent.setup();
-    render(
-      <SessionProvider>
-        <Workbench />
-      </SessionProvider>,
-    );
-    await screen.findByTestId("piece-count");
-    await user.click(screen.getByRole("button", { name: `Add ${definition.name}` }));
-    await expand(user, "Advanced placement");
-    await user.click(screen.getByRole("button", { name: "Free position" }));
-    await user.click(screen.getByRole("button", { name: "Place brick" }));
-    expect(screen.getByTestId("piece-count")).toHaveTextContent(/^1$/);
-    await user.click(screen.getByRole("button", { name: "Rotate 90°" }));
-    await user.click(screen.getByRole("button", { name: "Duplicate" }));
-    expect(screen.getByTestId("piece-count")).toHaveTextContent(/^2$/);
-  });
+  it.each(partDefinitions)(
+    "places, rotates as a draft and duplicates $name",
+    async (definition) => {
+      const user = userEvent.setup();
+      render(
+        <SessionProvider>
+          <Workbench />
+        </SessionProvider>,
+      );
+      await screen.findByTestId("piece-count");
+      await user.click(screen.getByRole("button", { name: `Add ${definition.name}` }));
+      await expand(user, "Advanced placement");
+      await user.click(screen.getByRole("button", { name: "Free position" }));
+      await user.click(screen.getByRole("button", { name: "Place brick" }));
+      expect(screen.getByTestId("piece-count")).toHaveTextContent(/^1$/);
+      await expand(user, "Advanced position");
+      await user.click(screen.getByRole("button", { name: "Rotate as draft" }));
+      await user.click(screen.getByRole("button", { name: "Duplicate" }));
+      expect(screen.getByTestId("piece-count")).toHaveTextContent(/^2$/);
+    },
+  );
 
   it("previews without changing the model, places at chosen coordinates, rotates, duplicates and undoes", async () => {
     const user = userEvent.setup();
@@ -299,7 +303,7 @@ describe("Manual building through accessible controls", () => {
     expect(screen.getByTestId("piece-count")).toHaveTextContent("1");
     expect(screen.getByTestId("pending-model-part")).toHaveTextContent("No pending part");
     expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(2);
-    await user.click(screen.getByRole("button", { name: "Rotate 90°" }));
+    await user.click(screen.getByRole("button", { name: "Rotate as draft" }));
     expect(screen.getByText("Rotation 90°")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Duplicate" }));
     expect(screen.getByTestId("piece-count")).toHaveTextContent("2");
@@ -506,8 +510,10 @@ describe("Manual building through accessible controls", () => {
     screen.getByRole("region", { name: /^Modeling workspace/ }).focus();
     await user.keyboard("{ArrowRight}r");
     expect(screen.getByText("Rotation 0°")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Rotate 90°" }));
-    expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0.4);
+    expect(screen.getByRole("region", { name: "Reposition piece" })).toBeVisible();
+    expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0);
+    await user.click(screen.getByRole("button", { name: "Apply move" }));
+    expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0.8);
     expect(screen.getByText("Rotation 90°")).toBeVisible();
     const x = screen.getByRole("spinbutton", { name: "Position X" });
     await user.click(x);
@@ -524,7 +530,7 @@ describe("Manual building through accessible controls", () => {
     await user.click(screen.getByRole("button", { name: "Apply position" }));
     expect(screen.getByText("X 2.96 · Y 0.56 · Z -0.24 cm")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Undo local edit" }));
-    expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0.4);
+    expect(screen.getByRole("spinbutton", { name: "Position X" })).toHaveValue(0.8);
     expect(screen.getByRole("spinbutton", { name: "Position Y" })).toHaveValue(0.48);
     expect(screen.getByRole("spinbutton", { name: "Position Z" })).toHaveValue(0);
   });

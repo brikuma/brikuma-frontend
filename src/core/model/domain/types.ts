@@ -113,6 +113,13 @@ export type EditCommand =
       readonly placement: "connect" | "grid" | "free";
       readonly baseRevision: string;
     }
+  | {
+      readonly type: "relocate";
+      readonly id: string;
+      readonly transform: GridTransform;
+      readonly placement: "connect" | "grid" | "free";
+      readonly baseRevision: string;
+    }
   | { readonly type: "remove-selection"; readonly ids: readonly string[] }
   | {
       readonly type: "recolor-selection";

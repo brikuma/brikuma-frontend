@@ -46,6 +46,7 @@ function Controls({
       repeat={false}
       awaitingNextPosition={awaitingNextPosition}
       onRepeat={vi.fn()}
+      onRotate={vi.fn()}
       onCancel={vi.fn()}
       onColor={(colorId) => setPlacement({ ...placement, colorId })}
       onPolicy={(target) => setPlacement({ ...placement, target })}

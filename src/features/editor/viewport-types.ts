@@ -33,6 +33,7 @@ export interface PlacementPreview {
   colorId: string;
   transform: GridTransform;
   target?: "surface" | "ground" | "free";
+  editing?: { instanceId: string; baseRevision: string };
 }
 export interface ModelViewportProps {
   model: Model;
@@ -52,12 +53,15 @@ export interface ModelViewportProps {
   onMetrics?: (metrics: RendererMetrics) => void;
   hidden: readonly string[];
   placement?: PlacementPreview | null;
+  placementTargetIds?: readonly string[];
   awaitingNextPosition?: boolean;
   onPlacementChange?: (transform: GridTransform) => void;
   onPlace?: (transform: GridTransform) => boolean;
   onCancelPlacement?: () => void;
   onMove?: (id: string, delta: { x: number; y: number; z: number }) => boolean;
   onRotate?: (id: string, degrees: 90 | -90) => boolean;
+  onReposition?: (id: string, rotate?: boolean) => boolean;
+  repositionReady?: boolean;
   onEditingLockChange?: (locked: boolean) => void;
   viewRequest?: { serial: number; view: CameraView };
   assembledResetRequest?: number;

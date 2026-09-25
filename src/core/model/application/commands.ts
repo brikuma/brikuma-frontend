@@ -32,7 +32,7 @@ export function createSession(model: Model): ModelSession {
 
 function updateInstances(
   model: Model,
-  command: Exclude<EditCommand, SelectionCommand | { type: "place" }>,
+  command: Exclude<EditCommand, SelectionCommand | { type: "place" | "relocate" }>,
 ): Result<readonly PartInstance[]> {
   if (command.type === "set-protection") return { ok: true, value: model.instances };
   if (command.type === "apply-variant") {
@@ -164,6 +164,29 @@ export function applyCommand(
     if (!placement.ok) return placement;
     nextCommand = { type: "add", instance: command.instance };
   }
+  if (command.type === "relocate") {
+    if (command.baseRevision !== model.revision)
+      return failure(
+        "revision-conflict",
+        "This move belongs to an older revision. Recalculate the preview before applying it.",
+      );
+    const source = model.instances.find((part) => part.id === command.id);
+    if (!source) return failure("unknown-instance", "Select an existing part first.");
+    const editable = ensureEditable(model, source.groupId);
+    if (!editable.ok) return editable;
+    const definition = policy.parts.find((part) => part.id === source.partId);
+    if (!definition) return failure("unknown-part", "Choose a supported demo part.");
+    const placement = validatePlacement(
+      { ...model, instances: model.instances.filter((part) => part.id !== source.id) },
+      policy.parts,
+      definition,
+      command.transform,
+      command.placement,
+      policy.bounds,
+    );
+    if (!placement.ok) return placement;
+    nextCommand = { type: "set-transform", id: source.id, transform: command.transform };
+  }
   if (command.type === "set-protection") {
     const group = groups.find((candidate) => candidate.id === command.groupId);
     if (!group) return failure("unknown-group", "This subassembly does not belong to the model.");
@@ -183,7 +206,7 @@ export function applyCommand(
     if (!outcome.ok) return outcome;
     groups = outcome.value.groups;
     changed = { ok: true, value: outcome.value.instances };
-  } else if (nextCommand.type !== "place") {
+  } else if (nextCommand.type !== "place" && nextCommand.type !== "relocate") {
     changed = updateInstances(model, nextCommand);
   } else return failure("invalid-model", "Unsupported placement command.");
   if (!changed.ok) return changed;

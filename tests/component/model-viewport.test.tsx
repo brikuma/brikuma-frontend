@@ -33,6 +33,7 @@ vi.mock("next/dynamic", () => ({
       primaryOrbit,
       selectThrough,
       onPickCandidates,
+      onFailure,
     }: ModelViewportProps & {
       view: CameraView;
       tool: ViewportTool;
@@ -48,9 +49,11 @@ vi.mock("next/dynamic", () => ({
       primaryOrbit: boolean;
       selectThrough: boolean;
       onPickCandidates: (ids: readonly string[]) => void;
+      onFailure: () => void;
     }) {
       return (
         <div>
+          <button onClick={onFailure}>Simulate renderer loss</button>
           <div data-testid="scene-camera">{`${view} · ${tool}`}</div>
           <div data-testid="scene-projection">{projection}</div>
           <div data-testid="scene-primary-orbit">{String(primaryOrbit)}</div>
@@ -96,6 +99,162 @@ beforeEach(() => {
 });
 
 describe("Specialist camera and rotation controls", () => {
+  it.each(["button", "keyboard"] as const)(
+    "waits for the parent's inspection lock to clear before the %s starts one rotation preview",
+    async (action) => {
+      const user = userEvent.setup();
+      const props = selectedViewportProps();
+      function GuardedViewport() {
+        const [locked, setLocked] = useState(false);
+        const [pending, setPending] = useState<PlacementPreview | null>(null);
+        const [attempts, setAttempts] = useState(0);
+        const [error, setError] = useState("");
+        return (
+          <>
+            <output data-testid="parent-edit-lock">{String(locked)}</output>
+            <output data-testid="reposition-attempts">{attempts}</output>
+            <output data-testid="guard-error">{error}</output>
+            <ModelViewport
+              {...props}
+              placement={pending}
+              repositionReady={!locked}
+              onEditingLockChange={setLocked}
+              onReposition={(id, rotate) => {
+                setAttempts((value) => value + 1);
+                if (locked) {
+                  setError("Return to assembled Build before moving this piece.");
+                  return false;
+                }
+                const source = props.model.instances.find((part) => part.id === id)!;
+                setPending({
+                  partId: source.partId,
+                  colorId: source.colorId,
+                  target: "ground",
+                  transform: { ...source.transform, rotation: rotate ? 90 : 0 },
+                  editing: { instanceId: source.id, baseRevision: props.model.revision },
+                });
+                return true;
+              }}
+            />
+          </>
+        );
+      }
+      render(<GuardedViewport />);
+      openViewTools();
+      await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
+      expect(screen.getByTestId("parent-edit-lock")).toHaveTextContent("true");
+      expect(screen.getByTestId("scene-inspection")).toHaveTextContent("brick-1");
+      if (action === "button")
+        await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+      else fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "r" });
+      expect(screen.getByTestId("parent-edit-lock")).toHaveTextContent("false");
+      expect(screen.getByTestId("scene-inspection")).toHaveTextContent("Complete model");
+      expect(screen.getByTestId("scene-placement-rotation")).toHaveTextContent("90");
+      expect(screen.getByTestId("reposition-attempts")).toHaveTextContent(/^1$/);
+      expect(screen.getByTestId("guard-error")).toBeEmptyDOMElement();
+      expect(screen.queryByRole("button", { name: "Apply rotation" })).not.toBeInTheDocument();
+    },
+  );
+
+  it.each(["Escape", "renderer loss"])(
+    "discards a queued inspection rotation on %s before the parent is ready",
+    async (cancel) => {
+      const user = userEvent.setup();
+      const props = selectedViewportProps();
+      const onReposition = vi.fn(() => true);
+      const { rerender } = render(
+        <ModelViewport {...props} onReposition={onReposition} repositionReady={false} />,
+      );
+      openViewTools();
+      await user.click(screen.getByRole("button", { name: "Inspect selected brick" }));
+      await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+      expect(onReposition).not.toHaveBeenCalled();
+      if (cancel === "Escape")
+        fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
+      else await user.click(screen.getByRole("button", { name: "Simulate renderer loss" }));
+      rerender(<ModelViewport {...props} onReposition={onReposition} repositionReady />);
+      expect(onReposition).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["button", "keyboard"] as const)(
+    "starts an existing-piece rotation preview through the %s without the raw rotation overlay",
+    async (action) => {
+      const user = userEvent.setup();
+      const props = selectedViewportProps();
+      const onReposition = vi.fn(() => true);
+      const onRotate = vi.fn(() => true);
+      const parentKey = vi.fn();
+      render(
+        <div onKeyDown={parentKey}>
+          <ModelViewport {...props} onReposition={onReposition} onRotate={onRotate} />
+        </div>,
+      );
+      await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+      if (action === "button")
+        await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+      else fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "r" });
+      expect(onReposition).toHaveBeenCalledExactlyOnceWith("brick-1", true);
+      expect(onRotate).not.toHaveBeenCalled();
+      expect(parentKey).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Apply rotation" })).not.toBeInTheDocument();
+      expect(screen.getByTestId("scene-rotation-preview")).toHaveTextContent("No rotation preview");
+    },
+  );
+
+  it("arms pick-to-reposition tools without a selection and never falls back after refusal", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const onReposition = vi.fn(() => false);
+    const onRotate = vi.fn(() => true);
+    const { rerender } = render(
+      <ModelViewport {...props} selected={null} onReposition={onReposition} onRotate={onRotate} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "g" });
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · move");
+    expect(screen.getByRole("button", { name: "Move tool" })).toHaveAttribute(
+      "title",
+      "Pick a piece, preview its new position, then Apply move",
+    );
+    await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+    expect(onReposition).not.toHaveBeenCalled();
+    expect(screen.getByTestId("scene-camera")).toHaveTextContent("iso · rotate");
+    rerender(<ModelViewport {...props} onReposition={onReposition} onRotate={onRotate} />);
+    await user.click(screen.getByRole("button", { name: "Rotate tool" }));
+    expect(onReposition).toHaveBeenCalledExactlyOnceWith("brick-1", true);
+    expect(onRotate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Apply rotation" })).not.toBeInTheDocument();
+  });
+
+  it("shows source-aware move feedback with canonical counts and cancels through Escape", async () => {
+    const user = userEvent.setup();
+    const props = selectedViewportProps();
+    const source = props.model.instances[0];
+    render(
+      <ModelViewport
+        {...props}
+        onReposition={vi.fn(() => true)}
+        placement={{
+          partId: source.partId,
+          colorId: source.colorId,
+          target: "ground",
+          transform: { ...source.transform, x: -4 },
+          editing: { instanceId: source.id, baseRevision: props.model.revision },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Activate interactive 3D" }));
+    expect(screen.getByText("Reposition Brick 2 × 4")).toBeVisible();
+    expect(screen.getByLabelText("Placement feedback")).not.toHaveTextContent("no longer");
+    expect(screen.getByTestId("scene-model-count")).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: "Cancel canvas move" })).toBeVisible();
+    fireEvent.keyDown(screen.getByTestId("model-viewport"), { key: "Escape" });
+    expect(props.onCancelPlacement).toHaveBeenCalledOnce();
+    expect(props.onMove).not.toHaveBeenCalled();
+    expect(source.transform.x).toBe(0);
+  });
+
   it.each(["Select tool", "Move tool", "Rotate tool"])(
     "leaves Orbit when choosing %s and marks only the active tool",
     async (name) => {
