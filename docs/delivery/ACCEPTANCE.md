@@ -1,5 +1,9 @@
 # Acceptance and evidence
 
+## Private GitHub CI bootstrap — 2026-09-25
+
+The owner authorized private GitHub publication and clarified that `brikuma` is the complete project entry point. The first frontend run at `beea7ac` passed the security job but failed the deterministic job on a small Linux runner: 45 of 46 failing cases hit the default five-second timeout, followed by one lookup failure after timed-out tests in the same file. The local configuration forced four workers onto the two-CPU hosted runner. Worker sizing now follows available CPU capacity, keeping one CPU for coordination and at most four workers. No assertion, test deadline, retry policy or required job is removed or relaxed. Local single-worker validation passed all 136 cases in the six affected suites; the slowest took 1.671 seconds. This is not a reproduction of the hosted Linux environment. Exact candidate checks, single-worker validation and subsequent hosted results are recorded under ignored `artifacts/github-setup/` and the main project's `artifacts/github-project/`; the initial failed run is retained as evidence rather than reported as a pass.
+
 ## Authorized placement commit review — 2026-09-25
 
 The owner authorized committing the completed placement-recovery and single-piece repositioning slices together. Parent and frontend instructions, architecture, ownership, quality, contribution and review policies were explicitly reread. The development results below describe their historical working-tree checks; commit preparation requires fresh exact-candidate verification and a separate read-only review. No dependency, lockfile, backend, infrastructure, root policy or remote change is included.

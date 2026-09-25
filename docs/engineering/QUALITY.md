@@ -4,6 +4,8 @@ Owner: frontend. Status: implemented; evidence in [acceptance](../delivery/ACCEP
 
 Use Node22.23.2 and npm10.9.8, independently installed frontend dependencies. `npm ci --ignore-scripts` preserves the reviewed lifecycle boundary; `npm run hooks:install` installs Husky into this repository. Never change global Git configuration. `npm run check` runs lint, formatting, generated Next route types, full/core TypeScript, graph checks and negative self-tests, pure/component tests, hook self-tests and local documentation checks. `npm run build` creates static `out/`; `npm run preview` serves that directory on loopback port4173 with a native development-only static file server.
 
+The deterministic test runner derives its worker limit from Node `availableParallelism()`, leaves one CPU for the coordinator and caps the result at four workers (minimum one). This keeps DOM-heavy component suites from oversubscribing small hosted runners. Tests retain their existing assertions, default timeouts and retry policy; test deadlines are not a UI performance benchmark.
+
 ## Staged gate and evidence
 
 Before an agent commit, stage explicit owned files, then use `node scripts/quality.mjs verify` to execute deterministic checks against matching staged/worktree inputs. Inspect the candidate diff and results read-only. Record findings in an ignored JSON array under `artifacts/`, then `node scripts/quality.mjs record-review <reviewer-label> <findings-json-path>`. The helper records the exact candidate tree, repository, base commit, lockfile hash, Node/npm versions, timestamp and actual command/log results. It does not prove review truth. Unresolved findings block; label a self-review honestly.
