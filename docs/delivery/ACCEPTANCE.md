@@ -1,10 +1,16 @@
 # Acceptance and evidence
 
+## CI browser execution budgets — 2026-09-25
+
+Hosted run `36149622840` at `f0992c0` exposed the first journey's failure on both attempts: the cumulative 30,000 ms test timeout interrupted the assertion after Redo at `building-journey.spec.ts:30`. The log did not report expiration of that assertion's separate five-second deadline. All 47 journeys were selected; one failed and 46 did not run under the first-failure policy, so the mandatory gate failed. The main project's ignored `artifacts/github-project/frontend-diagnostics-ci-failure.log` retains the output.
+
+An isolated local run of the same journey and assertions with 16× CPU throttling and SwiftShader exhausted the thirty-second budget near the final Instructions step. With the same throttling and a ninety-second budget, it passed in a total run time of 33.1 seconds. This is a resource-constrained simulation, not reproduction of the hosted runner or evidence of acceptable UI latency. [FE-DEC-024](../DECISIONS.md#fe-dec-024-ci-browser-execution-budgets) sets a 120-second CI journey default and thirty-minute combined deterministic job deadline, preserving local defaults, assertion timeouts, explicit test overrides, retries and mandatory failures. Hosted validation of the new budgets remains pending; no production fix, performance acceptance or successful frontend CI run is claimed.
+
 ## CI browser failure diagnostics — 2026-09-25
 
 Frontend GitHub Actions run `36145927655` was cancelled at the deterministic job's fifteen-minute deadline during browser tests, after multiple cases reached their thirty-second deadlines. The list reporter did not emit its final detailed failure summary before cancellation. The browser failure remains unresolved; the successful root integration run does not establish frontend browser acceptance.
 
-[FE-DEC-023](../DECISIONS.md#fe-dec-023-immediate-ci-browser-failure-diagnostics) adds immediate line/GitHub diagnostics and stops CI browser execution after its first permanently failed case, retaining the HTML report, full test selection, assertions, single retry and existing deadlines. Local runs remain unlimited. This changes failure reporting and scheduling, not pass criteria: an incomplete failed suite cannot satisfy `required`. Diagnostic configuration validation and subsequent hosted results must be recorded separately; no successful frontend CI run or resolved browser defect is claimed here.
+[FE-DEC-023](../DECISIONS.md#fe-dec-023-immediate-ci-browser-failure-diagnostics) added immediate line/GitHub diagnostics and stopped CI browser execution after its first permanently failed case, retaining the HTML report, full test selection, assertions, single retry and then-current deadlines. The later budget decision above is separate. Local runs remain unlimited. This changed failure reporting and scheduling, not pass criteria: an incomplete failed suite cannot satisfy `required`. Diagnostic configuration validation and subsequent hosted results must be recorded separately; no successful frontend CI run or resolved browser defect is claimed by this historical checkpoint.
 
 ## Private GitHub CI bootstrap — 2026-09-25
 
