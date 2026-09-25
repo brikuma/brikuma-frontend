@@ -243,6 +243,7 @@ test("A courtyard can be built in sections, edited and used to generate current 
   await page.getByRole("button", { name: "Update preview", exact: true }).click();
   await page.getByRole("button", { name: "Place brick", exact: true }).click();
   await nav.getByRole("link", { name: "Instructions", exact: true }).click();
+  await expect(page.getByText(/Local instruction draft · 464 pieces/)).toBeVisible();
   await expect(page.getByRole("status")).toContainText("out of date");
   await page.getByRole("button", { name: "Regenerate instructions", exact: true }).click();
   await expect(page.getByText(/Local instruction draft · 465 pieces/)).toBeVisible();
