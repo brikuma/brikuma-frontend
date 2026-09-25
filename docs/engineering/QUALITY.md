@@ -22,6 +22,8 @@ Pre-push requires those inputs to match committed `HEAD` before running and afte
 
 Playwright defaults to installed Google Chrome locally and its Chromium distribution in CI; Firefox/WebKit or real-device tests require explicitly available browsers. A software renderer does not establish GPU frame rate. Test descriptions and failures remain English. Automated axe is an aid to WCAG2.2AA review, not certification.
 
+In CI, Playwright uses line and GitHub reporters alongside the existing HTML report, so failure details are visible before the job finishes. `maxFailures: 1` stops the browser suite after its first permanently failed case, after the existing single retry. Local runs retain unlimited failures (`maxFailures: 0`). Test selection, assertions and deadlines remain unchanged. An early-stopped suite fails the browser command and the mandatory `required` job; tests not reached are not reported as passed. This diagnostic policy does not resolve an underlying browser failure.
+
 Remote protections are owner configuration: require the frontend `required` job, disallow bypass/force push, require review of policies/workflows. No remote protection is configured by a local file. Local hook timings and actual results are recorded in acceptance, not presumed passed.
 
 Sources: [Git hooks](https://git-scm.com/docs/githooks), [Husky](https://typicode.github.io/husky/how-to.html), [lint-staged](https://github.com/lint-staged/lint-staged), [commitlint hook](https://commitlint.js.org/guides/local-setup.html), [dependency-cruiser rules](https://github.com/sverweij/dependency-cruiser/blob/main/doc/rules-reference.md).

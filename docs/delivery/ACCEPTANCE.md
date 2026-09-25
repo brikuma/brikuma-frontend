@@ -1,5 +1,11 @@
 # Acceptance and evidence
 
+## CI browser failure diagnostics — 2026-09-25
+
+Frontend GitHub Actions run `36145927655` was cancelled at the deterministic job's fifteen-minute deadline during browser tests, after multiple cases reached their thirty-second deadlines. The list reporter did not emit its final detailed failure summary before cancellation. The browser failure remains unresolved; the successful root integration run does not establish frontend browser acceptance.
+
+[FE-DEC-023](../DECISIONS.md#fe-dec-023-immediate-ci-browser-failure-diagnostics) adds immediate line/GitHub diagnostics and stops CI browser execution after its first permanently failed case, retaining the HTML report, full test selection, assertions, single retry and existing deadlines. Local runs remain unlimited. This changes failure reporting and scheduling, not pass criteria: an incomplete failed suite cannot satisfy `required`. Diagnostic configuration validation and subsequent hosted results must be recorded separately; no successful frontend CI run or resolved browser defect is claimed here.
+
 ## Private GitHub CI bootstrap — 2026-09-25
 
 The owner authorized private GitHub publication and clarified that `brikuma` is the complete project entry point. The first frontend run at `beea7ac` passed the security job but failed the deterministic job on a small Linux runner: 45 of 46 failing cases hit the default five-second timeout, followed by one lookup failure after timed-out tests in the same file. The local configuration forced four workers onto the two-CPU hosted runner. Worker sizing now follows available CPU capacity, keeping one CPU for coordination and at most four workers. No assertion, test deadline, retry policy or required job is removed or relaxed. Local single-worker validation passed all 136 cases in the six affected suites; the slowest took 1.671 seconds. This is not a reproduction of the hosted Linux environment. Exact candidate checks, single-worker validation and subsequent hosted results are recorded under ignored `artifacts/github-setup/` and the main project's `artifacts/github-project/`; the initial failed run is retained as evidence rather than reported as a pass.
