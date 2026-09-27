@@ -20,4 +20,8 @@ The static build outputs `out/`. The preview command serves exported files; no a
 
 Routes: `/`, `/new`, `/editor`, `/instructions`, `/inventory`, `/community`, `/marketplace`, `/plans`, `/design-system`. Project selection uses four allowlisted slots. Browser-local saves restore models, edited instructions, briefs and references after reload; portable project files provide explicit backups. Undo histories survive client navigation but start fresh after restoration, and camera state is not saved. See [local projects](docs/engineering/LOCAL_PROJECTS.md) for storage, recovery and file boundaries.
 
-[Acceptance](docs/delivery/ACCEPTANCE.md) distinguishes executed checks from pending/unavailable checks. [Handoff](docs/ai/HANDOFF.md) records current limitations. Approved remote URLs are not available; submodule registration remains blocked. BRIKUMA is not affiliated with or certified by LEGO.
+[Acceptance](docs/delivery/ACCEPTANCE.md) distinguishes executed checks from pending/unavailable checks. [Handoff](docs/ai/HANDOFF.md) records current limitations. The integration repository pins this independent private frontend repository as a submodule; see the [global documentation](../docs/README.md). BRIKUMA is not affiliated with or certified by LEGO.
+
+## Verified build downloads
+
+The Frontend GitHub Actions workflow retains the tested static export after security, deterministic, build-budget, browser and accessibility checks pass. Open a successful run in the repository's **Actions** tab and download its `brikuma-frontend-<commit-sha>-<attempt>` artifact. It expires after seven days and requires repository access. [Quality](docs/engineering/QUALITY.md#verified-static-build-delivery) documents exact revision selection, CLI download and verification limits. Hosting remains deferred.

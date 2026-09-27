@@ -55,7 +55,7 @@ export function assertCommittedInputs(root) {
 }
 export function checkPush(root) {
   const before = assertCommittedInputs(root);
-  for (const script of ["check", "build", "test:e2e", "test:a11y"]) {
+  for (const script of ["check", "build", "perf:check", "test:e2e", "test:a11y"]) {
     const result = spawnSync("npm", ["run", script], { cwd: root, stdio: "inherit" });
     if (result.status !== 0) throw new Error(`Push gate failed: npm run ${script}`);
     sameIdentity(before, assertCommittedInputs(root));

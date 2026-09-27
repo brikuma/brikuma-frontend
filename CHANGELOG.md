@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Deliver the verified static build as a private GitHub Actions artifact, retain browser failure captures, and check bundle budgets before pushing.
 - Reuse the editor's fixed environment lighting across model and presentation updates without changing its appearance or quality settings.
 - Preview single-piece moves and rotations before applying them, preserving part identity and checked attachment with one-step undo.
 - Keep pending brick rotations aligned, recover nearby attachments after floor placement, and show current Undo/Redo feedback.
