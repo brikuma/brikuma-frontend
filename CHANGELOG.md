@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Select Playwright's full Chromium headless browser in CI, including the explicitly WebGL-disabled fallback check.
+
+- Adopt Fiber 9.8.1’s upstream renderer-disposal correction and refresh its resolved dependency evidence and notices. Record full CI browser traces on the first retry following Playwright guidance.
+
 - Deliver the verified static build as a private GitHub Actions artifact, retain browser failure captures, and check bundle budgets before pushing.
 - Reuse the editor's fixed environment lighting across model and presentation updates without changing its appearance or quality settings.
 - Preview single-piece moves and rotations before applying them, preserving part identity and checked attachment with one-step undo.

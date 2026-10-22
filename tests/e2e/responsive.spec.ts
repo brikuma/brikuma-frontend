@@ -422,7 +422,7 @@ test("FE-019: narrow routes reflow without page-level horizontal overflow", asyn
 
 test("FE-019: a browser with WebGL disabled preserves the full fallback", async ({ baseURL }) => {
   const browser = await chromium.launch({
-    channel: process.env.CI ? undefined : "chrome",
+    channel: process.env.CI ? "chromium" : "chrome",
     args: ["--disable-webgl"],
   });
   try {

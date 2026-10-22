@@ -20,7 +20,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     viewport: { width: 1440, height: 900 },
     reducedMotion: "reduce",
-    trace: "retain-on-failure",
+    trace: process.env.CI ? "on-first-retry" : "retain-on-failure",
     screenshot: "only-on-failure",
   },
   projects: [
@@ -28,7 +28,7 @@ export default defineConfig({
       name: "chromium",
       use: {
         browserName: "chromium",
-        channel: process.env.CI ? undefined : "chrome",
+        channel: process.env.CI ? "chromium" : "chrome",
         launchOptions: process.env.CI
           ? { args: ["--use-gl=angle", "--use-angle=swiftshader"] }
           : undefined,
