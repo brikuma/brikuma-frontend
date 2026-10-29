@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "repository": "brikuma-frontend",
+  "reviewedPublicBlobs": {
+    "cea0e7830e1d30f795cb6b34fa949ea0669bf85a": {
+      "private-email": "Public package-author attribution in the generated third-party license inventory; copyright/author lines reviewed and retained verbatim."
+    },
+    "2e6d7031592bc0d92a758ba378b4d88a97223ce7": {
+      "private-email": "Public package-author attribution in the generated third-party license inventory; copyright/author lines reviewed and retained verbatim."
+    },
+    "3e4cb439e3ed53dca17c0d277057eead045a2f98": {
+      "private-email": "Public package-author attribution in the generated third-party license inventory; copyright/author lines reviewed and retained verbatim."
+    },
+    "ba8743dd8540d02725533fe386e695dee8cceaf1": {
+      "private-email": "Synthetic factory-pattern tutorial fixtures with sample names and addresses, reviewed in their example-code context; third-party license remains unverified."
+    }
+  }
+}

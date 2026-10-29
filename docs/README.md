@@ -20,3 +20,5 @@ Canonical frontend implementation knowledge. Shared product/repository policy re
 - [References and asset provenance](references/README.md)
 
 Repository entry points: [README](../README.md), [instructions](../AGENTS.md), [Claude adapter](../CLAUDE.md), [vocabulary](../LEGEND.md), [contributing](../CONTRIBUTING.md), [changes](../CHANGELOG.md), [security](../SECURITY.md), [third-party notices](../THIRD_PARTY_NOTICES.md).
+
+- [Privacy tooling and contributor setup](../PRIVACY.md)

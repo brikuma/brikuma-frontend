@@ -8,3 +8,5 @@ package-lock.json
 skills-lock.json
 next-env.d.ts
 public/assets/previews
+
+.tools/

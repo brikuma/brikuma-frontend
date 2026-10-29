@@ -27,18 +27,21 @@
     "check:push": "node scripts/quality.mjs push",
     "deps:audit": "npm audit --omit=dev && npm audit",
     "perf:check": "node scripts/performance.mjs",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm run typecheck:core && npm run architecture:check && npm run architecture:test && npm test && npm run hooks:check && npm run docs:check && npm run licenses:check",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run typecheck:core && npm run architecture:check && npm run architecture:test && npm test && npm run hooks:check && npm run docs:check && npm run licenses:check && npm run privacy:test",
     "perf:lighthouse": "node scripts/lighthouse.mjs",
     "licenses:generate": "node scripts/licenses.mjs",
     "licenses:check": "node scripts/licenses.mjs --check",
-    "test:editor": "playwright test --config=playwright.editor.config.ts"
+    "test:editor": "playwright test --config=playwright.editor.config.ts",
+    "privacy:install": "python3 -B scripts/privacy-install.py",
+    "privacy:check": "python3 -B scripts/privacy.py full",
+    "privacy:test": "python3 -B scripts/privacy_test.py && python3 -B scripts/github_policy_test.py"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.23",
     "@react-three/drei": "10.7.8",
     "@react-three/fiber": "9.8.1",
     "lucide-react": "1.48.0",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "three": "0.186.0"
@@ -59,20 +62,21 @@
     "@types/three": "0.186.0",
     "dependency-cruiser": "18.4.0",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.4.3",
     "husky": "9.1.7",
     "jsdom": "30.1.1",
-    "lighthouse": "13.5.0",
+    "lighthouse": "13.6.0",
     "lint-staged": "17.5.1",
     "prettier": "3.9.9",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
-    "vite": "8.3.0",
-    "vitest": "5.0.1"
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
   },
   "packageManager": "npm@10.9.8",
   "engines": {
     "node": "22.23.2",
     "npm": "10.9.8"
-  }
+  },
+  "license": "MIT"
 }

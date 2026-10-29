@@ -1,1 +1,2 @@
+python3 -B scripts/privacy.py staged
 npm run check:commit

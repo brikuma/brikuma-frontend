@@ -175,3 +175,15 @@ Status: adopted during CI diagnosis, 2026-09-27. Use the stable Fiber 9.8.1 owne
 ## FE-DEC-030 Full Chromium for CI browser journeys
 
 Status: selected for hosted verification, 2026-09-27. Use Playwright's documented full Chromium headless channel for application end-to-end testing, including the explicit WebGL-disabled browser. This supersedes the retained headless-shell channel in FE-DEC-025 while preserving its full SwiftShader driver flags. Chrome recommends full headless for faithful application testing; Playwright documents possible GPU differences without a general speed guarantee. [Quality](engineering/QUALITY.md#browser-and-limitations) owns browser selection, [dependency evidence](engineering/DEPENDENCIES.md#full-chromium-headless-selection--2026-09-27) owns the exact API/version review and [acceptance](delivery/ACCEPTANCE.md#full-chromium-ci-browser-selection--2026-09-27) owns observed outcomes. No new package, rendering-quality change, deadline extension, skipped assertion or gate bypass is included. Local Chrome validation is separate from hosted Linux validation.
+
+## FE-DEC-031 Publication privacy and dependency refresh
+
+Status: adopted under the owner's 2026-10-29 publication plan. Preserve the static browser-local application and independent repository. Add local/CI privacy checks, MIT for original material, maintained upstream notices and the `maintainers` owner map. Refresh vulnerable direct and transitive dependencies within the verified toolchain; no application API behavior change is intended. Conversation source URLs are removed from publishable history while factual source summaries remain.
+
+[Privacy setup](../PRIVACY.md), [dependency evidence](engineering/DEPENDENCIES.md) and the [global publication policy](https://github.com/brikuma/brikuma/blob/main/docs/PUBLICATION.md) own the details. Public visibility and branch rules still require the final authorized publication sequence.
+
+## FE-DEC-032 Deferred timeouts during publication preparation
+
+Status: owner-directed on 2026-10-29. The owner deferred the known component-test timeouts to prioritize publication preparation. Issues [#5](https://github.com/brikuma/brikuma-frontend/issues/5), [#6](https://github.com/brikuma/brikuma-frontend/issues/6), [#7](https://github.com/brikuma/brikuma-frontend/issues/7), [#8](https://github.com/brikuma/brikuma-frontend/issues/8), [#9](https://github.com/brikuma/brikuma-frontend/issues/9) and [#10](https://github.com/brikuma/brikuma-frontend/issues/10) remain open. The last full run passed 792 tests and failed six by timeout; no green full-suite result is claimed.
+
+The [global one-time preparation decision](https://github.com/brikuma/brikuma/blob/main/docs/PUBLICATION.md#one-time-publication-preparation-decision) permits a separately reviewed, exact-candidate bootstrap commit with fresh applicable checks and explicit owner-accepted failure evidence. Permanent hooks, CI tests, assertions, timeouts and required checks remain unchanged. This exception neither resolves the timeouts nor authorizes a future merge through a failed protected-branch gate.

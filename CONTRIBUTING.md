@@ -6,6 +6,8 @@ Use `type(scope): imperative summary`. Types follow [global policy](../CONTRIBUT
 
 Keep a feature, its necessary tests and documentation in one coherent change. Inspect the exact candidate diff, stage explicit paths, run read-only staged checks and create fresh review evidence. Do not include unrelated work, sweep all files at the superproject root, append `git add` to formatting tasks or use unstaged fixes to make a staged snapshot pass.
 
-Hooks install per repository. Do not bypass a failing hook or run network installs inside hooks. Fresh-clone bootstrap and installed coverage are recorded in local quality/acceptance; file presence alone is not proof. CI reruns deterministic checks and does not trust ignored local evidence. No remote push or branch-protection mutation is authorized.
+Hooks install per repository. Do not bypass a failing hook or run network installs inside hooks. Fresh-clone bootstrap and installed coverage are recorded in local quality/acceptance; file presence alone is not proof. CI reruns deterministic checks and does not trust ignored local evidence. Remote publication and protection follow the separately approved publication sequence.
 
 [Workflow](docs/ai/WORKFLOW.md) · [Decisions](docs/DECISIONS.md) · [Acceptance](docs/delivery/ACCEPTANCE.md)
+
+Complete [privacy setup](PRIVACY.md) before contributing. The `privacy` check is required in addition to the existing owning gate. Changes to scanners, workflows, tool locks or exceptions require local validation and documented review of the exact candidate SHA. Original contributions use MIT; preserve upstream notices.

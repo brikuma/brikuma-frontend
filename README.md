@@ -25,3 +25,7 @@ Routes: `/`, `/new`, `/editor`, `/instructions`, `/inventory`, `/community`, `/m
 ## Verified build downloads
 
 The Frontend GitHub Actions workflow retains the tested static export after security, deterministic, build-budget, browser and accessibility checks pass. Open a successful run in the repository's **Actions** tab and download its `brikuma-frontend-<commit-sha>-<attempt>` artifact. It expires after seven days and requires repository access. [Quality](docs/engineering/QUALITY.md#verified-static-build-delivery) documents exact revision selection, CLI download and verification limits. Hosting remains deferred.
+
+Original project material is licensed under [MIT](LICENSE); third-party material retains its own terms. See [privacy setup](PRIVACY.md) and [security reporting](SECURITY.md). Public visibility remains pending the publication audit and final owner authorization.
+
+External agent skills retained in the history have an unverified redistribution license and are excluded from the project MIT grant; see [third-party notices](THIRD_PARTY_NOTICES.md#external-agent-skills-redistribution-license-unverified).

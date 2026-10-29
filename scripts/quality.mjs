@@ -1,3 +1,4 @@
+import { sanitizeEvidence } from "./evidence-sanitize.mjs";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
@@ -11,7 +12,7 @@ export function git(root, args) {
 }
 export function relevant(name) {
   return (
-    /^(src\/|tests\/|scripts\/|docs\/|public\/|\.husky\/|\.github\/|[^/]+\.(?:json|mjs|cjs|ts|mts|css|md|yaml|yml)$|\.node-version$|\.npmrc$|\.prettierignore$|\.gitignore$|\.editorconfig$)/.test(
+    /^(LICENSE$|src\/|tests\/|scripts\/|docs\/|public\/|\.husky\/|\.github\/|[^/]+\.(?:json|mjs|cjs|ts|mts|css|md|yaml|yml)$|\.node-version$|\.npmrc$|\.prettierignore$|\.gitignore$|\.editorconfig$)/.test(
       name,
     ) && name !== "skills-lock.json"
   );
@@ -34,7 +35,7 @@ export function identity(root) {
     encoding: "utf8",
   });
   return {
-    repository: git(root, ["rev-parse", "--show-toplevel"]),
+    repository: "brikuma-frontend",
     baseCommit: head.status === 0 ? head.stdout.trim() : "initial-state",
     candidateTree: assertSnapshot(root),
     lockfileHash: hash(readFileSync(path.join(root, "package-lock.json"))),
@@ -126,7 +127,11 @@ export function verify(root) {
     encoding: "utf8",
     maxBuffer: 20 * 1024 * 1024,
   });
-  const log = `${result.stdout || ""}\n${result.stderr || ""}`;
+  const log = sanitizeEvidence(
+    `${result.stdout || ""}\n${result.stderr || ""}`,
+    root,
+    "brikuma-frontend",
+  );
   const relativeLog = `artifacts/quality/check-${before.candidateTree}.log`;
   writeFileSync(path.join(root, relativeLog), log);
   process.stdout.write(log);

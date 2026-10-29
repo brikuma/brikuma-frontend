@@ -1,1 +1,2 @@
+python3 -B scripts/privacy.py pre-push
 npm run check:push

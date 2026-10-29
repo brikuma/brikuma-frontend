@@ -43,7 +43,7 @@ The owner selected downloadable builds with hosting deferred on 2026-09-27. The 
 Artifacts are named `brikuma-frontend-<commit-sha>-<attempt>`, use the existing pinned official upload action, exclude hidden files and expire after seven days. The attempt suffix keeps reruns distinct without overwriting earlier evidence. Use a successful workflow run with a successful `required` job; for pull requests, the SHA identifies the tested merge revision. Download from **Actions → Frontend → selected run → Artifacts**, or select the exact run and artifact with the authenticated CLI:
 
 ```sh
-gh run download <run-id> --repo MatteoVincenti/brikuma-frontend \
+gh run download <run-id> --repo brikuma/brikuma-frontend \
   --name brikuma-frontend-<commit-sha>-<attempt> --dir ./frontend-build
 ```
 
