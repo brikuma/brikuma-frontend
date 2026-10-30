@@ -1,11 +1,11 @@
-import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
 function walk(root) {
-  return readdirSync(root).flatMap((name) => {
-    const file = path.join(root, name);
-    return statSync(file).isDirectory() ? walk(file) : [file];
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const file = path.join(root, entry.name);
+    return entry.isDirectory() ? walk(file) : entry.isFile() ? [file] : [];
   });
 }
 const assets = walk("out");
@@ -65,7 +65,7 @@ if (lazyUpperBound > 900 * 1024)
   );
 const previews = assets.filter((file) => file.includes("/assets/previews/"));
 const fonts = assets.filter((file) => /\.(woff2?|ttf|otf)$/.test(file));
-const downloadedFontBytes = fonts.reduce((total, file) => total + statSync(file).size, 0);
+const downloadedFontBytes = fonts.reduce((total, file) => total + readFileSync(file).length, 0);
 if (downloadedFontBytes > 120 * 1024) failures.push("Font assets exceed 120KiB.");
 const report = {
   measuredAt: new Date().toISOString(),
@@ -78,11 +78,10 @@ const report = {
   lazyAllChunksGzipBytes: lazyUpperBound,
   lazyFiles: remaining,
   downloadedFontBytes,
-  previews: previews.map((file) => ({
-    file,
-    bytes: statSync(file).size,
-    gzipBytes: gzipSync(readFileSync(file)).length,
-  })),
+  previews: previews.map((file) => {
+    const content = readFileSync(file);
+    return { file, bytes: content.length, gzipBytes: gzipSync(content).length };
+  }),
   failures,
 };
 mkdirSync("artifacts/performance", { recursive: true });
