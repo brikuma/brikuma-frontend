@@ -47,7 +47,7 @@ gh run download <run-id> --repo brikuma/brikuma-frontend \
   --name brikuma-frontend-<commit-sha>-<attempt> --dir ./frontend-build
 ```
 
-The archive contains static site files, with `index.html`, exported routes, assets and third-party notices at its root. It requires a static HTTP server; opening HTML directly from the filesystem does not validate application routing. Download access follows the private repository's permissions. This delivery contract does not enable hosting, a public release, physical validation or branch protection. The root integration checkout selects an exact frontend commit; choose its matching successful frontend run when retrieving that build. Actual hosted results and artifact download checks belong in the ignored run evidence, separately from this configuration.
+The archive contains static site files, with `index.html`, exported routes, assets and third-party notices at its root. It requires a static HTTP server; opening HTML directly from the filesystem does not validate application routing. Download access follows GitHub Actions permissions for the repository. This delivery contract does not enable hosting or physical validation. Repository visibility and branch rules are governed by the publication policy. The root integration checkout selects an exact frontend commit; choose its matching successful frontend run when retrieving that build. Actual hosted results and artifact download checks belong in the ignored run evidence, separately from this configuration.
 
 Action contract checked 2026-09-27: [pinned upload-artifact inputs and behavior](https://github.com/actions/upload-artifact/tree/043fb46d1a93c77aae656e7c1c64a875d1fc6a0a). See [FE-DEC-028](../DECISIONS.md#fe-dec-028-verified-static-build-delivery).
 

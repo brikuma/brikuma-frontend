@@ -20,12 +20,12 @@ The static build outputs `out/`. The preview command serves exported files; no a
 
 Routes: `/`, `/new`, `/editor`, `/instructions`, `/inventory`, `/community`, `/marketplace`, `/plans`, `/design-system`. Project selection uses four allowlisted slots. Browser-local saves restore models, edited instructions, briefs and references after reload; portable project files provide explicit backups. Undo histories survive client navigation but start fresh after restoration, and camera state is not saved. See [local projects](docs/engineering/LOCAL_PROJECTS.md) for storage, recovery and file boundaries.
 
-[Acceptance](docs/delivery/ACCEPTANCE.md) distinguishes executed checks from pending/unavailable checks. [Handoff](docs/ai/HANDOFF.md) records current limitations. The integration repository pins this independent private frontend repository as a submodule; see the [global documentation](../docs/README.md). BRIKUMA is not affiliated with or certified by LEGO.
+[Acceptance](docs/delivery/ACCEPTANCE.md) distinguishes executed checks from pending/unavailable checks. [Handoff](docs/ai/HANDOFF.md) records current limitations. The integration repository pins this independent frontend repository as a submodule; see the [global documentation](../docs/README.md). BRIKUMA is not affiliated with or certified by LEGO.
 
 ## Verified build downloads
 
 The Frontend GitHub Actions workflow retains the tested static export after security, deterministic, build-budget, browser and accessibility checks pass. Open a successful run in the repository's **Actions** tab and download its `brikuma-frontend-<commit-sha>-<attempt>` artifact. It expires after seven days and requires repository access. [Quality](docs/engineering/QUALITY.md#verified-static-build-delivery) documents exact revision selection, CLI download and verification limits. Hosting remains deferred.
 
-Original project material is licensed under [MIT](LICENSE); third-party material retains its own terms. See [privacy setup](PRIVACY.md) and [security reporting](SECURITY.md). Public visibility remains pending the publication audit and final owner authorization.
+Original project material is licensed under [MIT](LICENSE); third-party material retains its own terms. See [privacy setup](PRIVACY.md) and [security reporting](SECURITY.md). Contributions use pull requests with required privacy and quality checks; only designated maintainers may merge.
 
 External agent skills retained in the history have an unverified redistribution license and are excluded from the project MIT grant; see [third-party notices](THIRD_PARTY_NOTICES.md#external-agent-skills-redistribution-license-unverified).
