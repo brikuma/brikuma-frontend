@@ -114,3 +114,15 @@ Direct updates are Next.js and eslint-config-next 16.4.3, Vite 8.3.5, Vitest 5.0
 Sources: [Next.js advisory](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw), [Vite release](https://github.com/vitejs/vite/releases/tag/v8.3.5), [Vitest release](https://github.com/vitest-dev/vitest/releases/tag/v5.0.5), [Lighthouse metadata](https://registry.npmjs.org/lighthouse/13.6.0), [undici release](https://github.com/nodejs/undici/releases/tag/v8.12.3), [sharp advisory](https://github.com/lovell/sharp/security/advisories/GHSA-wq5f-xc86-pv6w).
 
 The final full-tree `npm audit` returned zero vulnerabilities after these updates. This records known-advisory coverage on this date, not an absence-of-bugs guarantee. Synthetic scanner tests and owning application/tooling gates remain separate checks.
+
+## Compatible Dependabot updates (2026-10-30)
+
+Update React and ReactDOM together to 19.3.1: the installed renderer requires an exact React version match. Update Lucide to 1.62.0 and user-event to 14.6.8. The 55 Lucide exports imported by the application are present in the reviewed target package. These versions support Node 22.23.2 and retain the existing MIT/ISC licenses without new package install lifecycle scripts. Regenerate the third-party inventory and retain its public attributions verbatim. Its exact immutable blob must be reviewed in the approved base privacy policy before this dependency change is merged.
+
+Update setup-node to 7.1.0 (`949feb2413d6458794dcd2491c4babbbce0c15c1`) and upload-artifact to 7.0.2 (`cf430e030ddbb5b0abf93d22962f4752f3646cd9`). Both remain pinned to complete commit SHAs with the existing inputs and read-only workflow permissions. No timeout, retry, assertion, required check or browser selection changes are included.
+
+Retain TypeScript 5.9.3. The proposed TypeScript 7.0.2 update removes the JavaScript compiler API consumed by Next.js, while even the latest stable typescript-eslint release checked, 8.72.1, has the peer range >=4.8.4 <6.1.0. A TypeScript 7 migration needs a separately reviewed compiler/API compatibility strategy; forcing peer resolution would not establish support. The incompatible Dependabot PR was closed with this explanation.
+
+Sources: [React release](https://github.com/react/react/releases/tag/v19.3.1), [Lucide release](https://github.com/lucide-icons/lucide/releases/tag/1.62.0), [user-event release](https://github.com/testing-library/user-event/releases/tag/v14.6.8), [setup-node release](https://github.com/actions/setup-node/releases/tag/v7.1.0), [upload-artifact release](https://github.com/actions/upload-artifact/releases/tag/v7.0.2), [TypeScript 7 migration guidance](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0/).
+
+The installed lockfile and generated notices define the candidate. Audit and application-check results are recorded separately; package metadata alone does not prove application compatibility.
