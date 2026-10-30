@@ -1,4 +1,12 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 function notices(directory, relative = "", depth = 0) {
@@ -64,9 +72,15 @@ for (const [directory, metadata] of Object.entries(lock.packages).sort(([a], [b]
   }
   for (const file of files.sort()) {
     const absolute = path.join(directory, file);
-    if (statSync(absolute).size > 2 * 1024 * 1024)
-      throw new Error(`Unexpectedly large notice: ${absolute}`);
-    fragments.push(`\n--- ${file} ---\n`, readFileSync(absolute, "utf8"));
+    const descriptor = openSync(absolute, "r");
+    try {
+      const metadata = fstatSync(descriptor);
+      if (!metadata.isFile() || metadata.size > 2 * 1024 * 1024)
+        throw new Error(`Invalid or unexpectedly large notice: ${absolute}`);
+      fragments.push(`\n--- ${file} ---\n`, readFileSync(descriptor, "utf8"));
+    } finally {
+      closeSync(descriptor);
+    }
   }
 }
 if (metadataOnly.length)
